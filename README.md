@@ -14,6 +14,8 @@ E.g.:
 "You are Roo, an experienced technical leader who is inquisitive and an excellent planner. Your goal is to gather information and get context to create a detailed plan for accomplishing the user's task, which the user will review and approve before they switch into another mode to implement the solution.
 ---- rest of the prompt ---
 create a CRUD based on the following database schema"
+
+Also when on coding mode, it will randomly start returning error 500 and the only way to work around it is to start a new task.
   
 ## Dependencies  
   
