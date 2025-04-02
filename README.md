@@ -8,12 +8,14 @@ This FastAPI application acts as a bridge, exposing an OpenAI-compatible `/v1/ch
 
 **Known Issues**
 
-Currently the Architect mode will NOT send the prompt on the first interaction.
-WORKAROUND: Start a new task on Roo (Just say Hi), then copy/paste the Roo Code Architect prompt into the conversation window + your task.
+Since this is the web version of Gemini, it DOES NOT take system prompts.
+WORKAROUND: Start a new task on Roo (Just say Hi), then copy/paste the Roo Code prompt for the model you're using into the conversation window + your task.
 E.g.: 
 "You are Roo, an experienced technical leader who is inquisitive and an excellent planner. Your goal is to gather information and get context to create a detailed plan for accomplishing the user's task, which the user will review and approve before they switch into another mode to implement the solution.
 ---- rest of the prompt ---
 create a CRUD based on the following database schema"
+
+P.s: I THINK that when changing between modes (E.g.: from Architect to Coder), it will then send the whole prompt to the conversation, but I need further investigation.
 
 Also when on coding mode, it will randomly start returning error 500 and the only way to work around it is to start a new task.
   
