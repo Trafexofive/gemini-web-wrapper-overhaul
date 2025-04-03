@@ -5,56 +5,72 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciar Chats - Gemini API</title>
     <style>
-        /* (Seu CSS como antes, mais a nova classe .btn-is-active) */
+        /* (Seu CSS como antes) */
         body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
         .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         h1, h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        #chatList table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        #chatList th, #chatList td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle;} /* Added vertical-align */
+        #chatList table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; /* Ajuda com layout */}
+        #chatList th, #chatList td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; word-wrap: break-word; /* Quebra palavras longas */}
         #chatList th { background-color: #f2f2f2; }
         #chatList tr:nth-child(even) { background-color: #f9f9f9; }
-        button { padding: 8px 12px; margin: 0; /* Reduced margin */ border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; line-height: 1.2; /* Added for consistency */}
-        .btn-refresh { background-color: #007bff; color: white; margin-bottom: 10px; /* Spacing */}
+        button { padding: 8px 12px; margin: 0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; line-height: 1.2; }
+        select { padding: 8px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; } /* Estilo para Select */
+        .btn-refresh { background-color: #007bff; color: white; margin-bottom: 10px;}
         .btn-create { background-color: #28a745; color: white; }
         .btn-set-active { background-color: #ffc107; color: #333; }
-        .btn-is-active { background-color: #28a745; color: white; font-weight: bold;} /* Botão ATIVO verde */
-        .btn-delete { background-color: #dc3545; color: white; margin-left: 5px; /* Spacing */ }
+        .btn-is-active { background-color: #28a745; color: white; font-weight: bold;}
+        .btn-delete { background-color: #dc3545; color: white; margin-left: 5px; }
         button:hover { opacity: 0.9; }
-        #createChat input[type="text"] { padding: 8px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; width: calc(100% - 130px); }
+        #createChat label { margin-right: 5px; font-weight: bold;}
+        #createChat input[type="text"] { padding: 8px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; width: calc(50% - 80px); /* Ajuste largura */}
+        #createChat select { width: calc(50% - 80px); } /* Ajuste largura */
         #statusMessage { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
         .status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .status-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        /* activeChatStatus removido */
-        code { background-color: #eee; padding: 2px 4px; border-radius: 3px; font-family: monospace; word-break: break-all; } /* Added word-break */
-        td:last-child { white-space: nowrap; width: 1%;} /* Evita quebra de linha nos botões */
-    </style>
+        code { background-color: #eee; padding: 2px 4px; border-radius: 3px; font-family: monospace; word-break: break-all; }
+        td:last-child { white-space: nowrap; width: 1%;}
+        td select { padding: 5px; border: 1px solid #ccc; border-radius: 4px; width: 95%; box-sizing: border-box;
+        }
+        th.col-desc { width: 30%; } /* Largura coluna descrição */
+        th.col-mode { width: 15%; } /* Largura coluna modo */
+        th.col-id { width: 35%; }   /* Largura coluna ID */
+        th.col-actions { width: 20%;} /* Largura coluna ações */
+ </style>
 </head>
 <body>
-
     <div class="container">
         <h1>Gerenciar Sessões de Chat</h1>
-
         <div id="createChat">
             <h2>Criar Novo Chat</h2>
-            <input type="text" id="chatDescription" placeholder="Descrição (opcional)">
-            <button id="btnCreateChat" class="btn-create">Criar</button>
+            <div>
+              <label for="chatDescription">Descrição:</label>
+              <input type="text" id="chatDescription" placeholder="(Opcional)">
+            </div>
+            <div style="margin-top: 10px;">
+              <label for="chatMode">Modo:</label>
+              <select id="chatMode">
+                  <option value="Default">Default</option>
+                  <option value="Code">Code</option>
+                  <option value="Architect">Architect</option>
+                  <option value="Debug">Debug</option>
+                  <option value="Ask">Ask</option>
+              </select>
+            </div>
+            <div style="margin-top: 10px;">
+              <button id="btnCreateChat" class="btn-create">Criar Chat</button>
+            </div>
         </div>
 
         <hr style="margin: 20px 0;">
 
         <div id="chatListSection">
+           </div>
+        <hr style="margin: 20px 0;">
+
             <h2>Chats Existentes</h2>
             <button id="btnRefreshList" class="btn-refresh">Atualizar Lista</button>
-            <div id="chatList">
-                <p>Carregando lista de chats...</p>
-                </div>
-        </div>
-
-        <div id="statusMessage"></div>
-
-    </div>
-
+            <div id="chatList"><p>Carregando...</p></div> </div>
+        <div id="statusMessage"></div> </div>
     <script src="/static/js/manage_chats.js"></script>
-
 </body>
 </html>

@@ -1,135 +1,140 @@
-# db.py
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, List, Tuple # Importar Tuple
+from typing import Any, List, Tuple, Dict
 
 DB_FILE = Path("chat_sessions.db")
 db_conn: sqlite3.Connection | None = None
 
 def _init_db_sync():
-    """Inicializa o DB e a tabela (com coluna 'description') se não existirem."""
+    """Inicializa DB com colunas 'description', 'mode', e 'system_prompt_sent'."""
     global db_conn
-    if db_conn:
-        # print(f"Database already connected: {DB_FILE}") # Log menos verboso
-        return True
+    if db_conn: return True
     try:
         print(f"Attempting to connect/create database: {DB_FILE.resolve()}")
         DB_FILE.parent.mkdir(parents=True, exist_ok=True)
         db_conn = sqlite3.connect(DB_FILE, check_same_thread=False)
         cursor = db_conn.cursor()
-        # <<< MODIFICADO: Adicionada coluna 'description' >>>
+        # <<< MODIFICADO: Adicionada coluna 'system_prompt_sent' >>>
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 chat_id TEXT PRIMARY KEY,
                 metadata_json TEXT NOT NULL,
                 description TEXT,
+                mode TEXT,
+                system_prompt_sent BOOLEAN DEFAULT FALSE NOT NULL, -- Flag para prompt inicial
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_chat_id ON sessions(chat_id)")
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
-        if not cursor.fetchone():
-             raise sqlite3.DatabaseError("Table 'sessions' was not created successfully.")
+        if not cursor.fetchone(): raise sqlite3.DatabaseError("Table 'sessions' not created.")
         db_conn.commit()
         print(f"Database initialized/connected successfully: {DB_FILE}")
         return True
-    except sqlite3.Error as e:
-        print(f"!!!!!!!! CRITICAL SQLITE ERROR during init !!!!!!!!: {e}")
-        db_conn = None
-        return False
-    except Exception as e:
-        print(f"!!!!!!!! CRITICAL GENERIC ERROR during init !!!!!!!!: {e}")
-        db_conn = None
-        return False
+    except sqlite3.Error as e: print(f"SQLITE ERROR during init: {e}"); db_conn = None; return False
+    except Exception as e: print(f"GENERIC ERROR during init: {e}"); db_conn = None; return False
 
-def _load_sessions_sync() -> dict:
-    """Carrega apenas os METADADOS das sessões do DB para um dicionário em memória."""
-    if not db_conn:
-        print("ERROR inside _load_sessions_sync: Cannot load sessions, DB connection not available.")
-        return {}
-    sessions_metadata = {}
+# <<< MODIFICADO: Carrega METADATA, MODO e FLAG PROMPT_SENT para cache >>>
+def _load_sessions_sync() -> Dict[str, Dict[str, Any]]:
+    """Carrega metadata, mode e system_prompt_sent das sessões para cache."""
+    if not db_conn: print("ERROR inside _load_sessions_sync: DB down."); return {}
+    # Estrutura do cache: { chat_id: {"metadata": obj, "mode": str|None, "prompt_sent": bool} }
+    sessions_cache: Dict[str, Dict[str, Any]] = {}
     try:
         cursor = db_conn.cursor()
-        # Seleciona apenas id e metadata para o cache em memória
-        cursor.execute("SELECT chat_id, metadata_json FROM sessions")
+        # <<< MODIFICADO: Seleciona system_prompt_sent também >>>
+        cursor.execute("SELECT chat_id, metadata_json, mode, system_prompt_sent FROM sessions")
         rows = cursor.fetchall()
         for row in rows:
-            chat_id, metadata_json = row
+            chat_id, metadata_json, mode, prompt_sent_db = row
             try:
                 metadata = json.loads(metadata_json)
-                sessions_metadata[chat_id] = metadata
-            except json.JSONDecodeError:
-                print(f"Warning: Could not decode JSON metadata for chat_id {chat_id}. Skipping.")
-        print(f"Loaded metadata for {len(sessions_metadata)} chat sessions from database.")
-        return sessions_metadata
-    except Exception as e:
-        print(f"Error loading session metadata from database: {e}")
-        return {}
+                # Converte valor do DB (0 ou 1) para booleano
+                prompt_sent = bool(prompt_sent_db)
+                sessions_cache[chat_id] = {"metadata": metadata, "mode": mode, "prompt_sent": prompt_sent}
+            except json.JSONDecodeError: print(f"Warning: Bad JSON metadata for {chat_id}. Skipping.")
+        print(f"Loaded data for {len(sessions_cache)} chat sessions into memory cache.")
+        return sessions_cache
+    except Exception as e: print(f"Error loading session data from DB: {e}"); return {}
 
-# <<< NOVO: Função para buscar ID e Descrição >>>
-def _get_all_chats_info_sync() -> List[Tuple[str, str | None]]:
-    """Busca chat_id e description de todas as sessões no DB."""
-    if not db_conn:
-        print("ERROR inside _get_all_chats_info_sync: DB connection not available.")
-        return []
-    chats_info = []
+# <<< Sem alterações: Busca ID, Descrição e Modo para a lista >>>
+def _get_all_chats_info_sync() -> List[Tuple[str, str | None, str | None]]:
+    """Busca chat_id, description e mode de todas as sessões no DB."""
+    if not db_conn: print("ERROR inside _get_all_chats_info_sync: DB down."); return []
     try:
-        cursor = db_conn.cursor()
-        cursor.execute("SELECT chat_id, description FROM sessions ORDER BY last_updated DESC")
-        rows = cursor.fetchall()
-        return rows # Retorna lista de tuplas (chat_id, description)
-    except Exception as e:
-        print(f"Error getting chats info from database: {e}")
-        return []
+        cursor = db_conn.cursor(); cursor.execute("SELECT chat_id, description, mode FROM sessions ORDER BY last_updated DESC")
+        return cursor.fetchall()
+    except Exception as e: print(f"Error getting chats info from DB: {e}"); return []
 
-# <<< MODIFICADO: Função específica para CRIAR uma sessão >>>
-def _create_session_sync(chat_id: str, metadata: dict, description: str | None):
-    """Insere uma NOVA sessão no DB."""
-    if not db_conn:
-        print(f"ERROR inside _create_session_sync: Cannot create session {chat_id}, DB connection not available.")
-        return False
+# <<< Sem alterações: Cria sessão (flag prompt_sent usa default FALSE) >>>
+def _create_session_sync(chat_id: str, metadata: dict, description: str | None, mode: str | None):
+    """Insere uma NOVA sessão no DB (prompt_sent será FALSE por default)."""
+    if not db_conn: print(f"ERROR inside _create_session_sync: Cannot create {chat_id}, DB down."); return False
     try:
-        metadata_json = json.dumps(metadata)
-        cursor = db_conn.cursor()
-        # INSERT simples, pois é para criar (não deve existir)
+        metadata_json = json.dumps(metadata); cursor = db_conn.cursor()
+        # system_prompt_sent não precisa ser listado, usará o DEFAULT FALSE
         cursor.execute("""
-            INSERT INTO sessions (chat_id, metadata_json, description)
-            VALUES (?, ?, ?)
-        """, (chat_id, metadata_json, description))
-        db_conn.commit()
-        print(f"Session CREATED in DB: {chat_id} - Desc: '{description or 'N/A'}'")
-        return True
-    except sqlite3.IntegrityError:
-         # Caso raro onde o UUID colide ou a lógica de chamar falhou
-         print(f"ERROR: Tried to create session {chat_id}, but it already exists (IntegrityError).")
-         return False
-    except Exception as e:
-        print(f"Error CREATING session {chat_id} in database: {e}")
-        return False
+            INSERT INTO sessions (chat_id, metadata_json, description, mode) VALUES (?, ?, ?, ?)
+        """, (chat_id, metadata_json, description, mode))
+        db_conn.commit(); print(f"Session CREATED in DB: {chat_id} ..."); return True
+    except sqlite3.IntegrityError: print(f"ERROR: Session {chat_id} already exists."); return False
+    except Exception as e: print(f"Error CREATING session {chat_id} in DB: {e}"); return False
 
-# <<< MODIFICADO: Função específica para ATUALIZAR METADATA >>>
+# <<< Sem alterações: Atualiza apenas metadata >>>
 def _update_session_metadata_sync(chat_id: str, metadata: dict):
-    """Atualiza APENAS o metadata_json e last_updated de uma sessão existente."""
+    """Atualiza APENAS o metadata_json e last_updated."""
+    # (Código como antes)
+    if not db_conn: print(f"ERROR inside _update_metadata: Cannot update {chat_id}, DB down."); return False
+    try:
+        metadata_json = json.dumps(metadata); cursor = db_conn.cursor()
+        cursor.execute("UPDATE sessions SET metadata_json = ?, last_updated = CURRENT_TIMESTAMP WHERE chat_id = ?", (metadata_json, chat_id))
+        if cursor.rowcount == 0: print(f"Warning: Tried to update metadata for non-existent chat_id {chat_id}."); return False
+        db_conn.commit(); return True
+    except Exception as e: print(f"Error UPDATING metadata for {chat_id} in DB: {e}"); return False
+
+
+# <<< NOVO: Função para marcar que o prompt do sistema foi enviado >>>
+def _mark_system_prompt_sent_sync(chat_id: str):
+    """Define system_prompt_sent = TRUE para um chat_id."""
     if not db_conn:
-        print(f"ERROR inside _update_session_metadata_sync: Cannot update session {chat_id}, DB connection not available.")
+        print(f"ERROR inside _mark_prompt_sent: Cannot update {chat_id}, DB connection not available.")
         return False
     try:
-        metadata_json = json.dumps(metadata)
+        cursor = db_conn.cursor()
+        cursor.execute("UPDATE sessions SET system_prompt_sent = TRUE WHERE chat_id = ?", (chat_id,))
+        if cursor.rowcount == 0:
+            print(f"Warning: Tried to mark prompt sent for non-existent chat_id {chat_id}.")
+            return False
+        db_conn.commit()
+        print(f"System prompt marked as SENT for chat_id: {chat_id}")
+        return True
+    except Exception as e:
+        print(f"Error marking system prompt sent for {chat_id} in database: {e}")
+        return False
+
+def _update_session_mode_sync(chat_id: str, new_mode: str | None):
+    """Atualiza o 'mode' e reseta 'system_prompt_sent' para FALSE."""
+    if not db_conn:
+        print(f"ERROR inside _update_session_mode_sync: Cannot update {chat_id}, DB down.")
+        return False
+    try:
         cursor = db_conn.cursor()
         cursor.execute("""
             UPDATE sessions
-            SET metadata_json = ?, last_updated = CURRENT_TIMESTAMP
+            SET mode = ?,
+                system_prompt_sent = FALSE,
+                last_updated = CURRENT_TIMESTAMP
             WHERE chat_id = ?
-        """, (metadata_json, chat_id))
-        # Verifica se alguma linha foi realmente atualizada
+        """, (new_mode, chat_id))
         if cursor.rowcount == 0:
-            print(f"Warning: Tried to update metadata for non-existent chat_id {chat_id}.")
-            return False # Ou talvez True, dependendo se considera erro? Vamos retornar False.
+            print(f"Warning: Tried to update mode for non-existent chat_id {chat_id}.")
+            return False
         db_conn.commit()
-        # print(f"Session metadata UPDATED in DB: {chat_id}") # Log opcional
+        print(f"Session mode UPDATED and prompt flag RESET for: {chat_id} (New Mode: {new_mode or 'Default'})")
         return True
     except Exception as e:
-        print(f"Error UPDATING session metadata for {chat_id} in database: {e}")
+        print(f"Error UPDATING session mode for {chat_id} in database: {e}")
         return False
 
 def _delete_session_sync(chat_id: str):
