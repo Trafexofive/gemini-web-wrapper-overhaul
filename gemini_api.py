@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     print("Lifespan: Tentando inicializar Gemini Client...")
     try:
         temp_client = GeminiClient(proxy=None)
-        await temp_client.init(timeout=30, auto_close=False, auto_refresh=True)
+        await temp_client.init(timeout=180, auto_close=False, auto_refresh=True)
         gemini_client = temp_client
         print("Lifespan: Gemini Client inicializado com sucesso.")
     except Exception as e:
