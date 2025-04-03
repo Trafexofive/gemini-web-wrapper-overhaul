@@ -1,6 +1,7 @@
 import base64
 import tempfile
 import os
+from pathlib import Path
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -10,6 +11,9 @@ from typing import List
 from fastapi import FastAPI, HTTPException, Request, Path as FastApiPath, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError # Importa BaseModel
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 
 # Modelos Pydantic (Importa todos necessários, incluindo os novos)
 from models.models import (
@@ -80,6 +84,26 @@ async def get_current_db_connection():
     return db.db_conn
 
 # --- Endpoints ---
+
+current_script_dir = Path(__file__).parent
+static_dir_path = current_script_dir / "static"
+app.mount("/static", StaticFiles(directory=static_dir_path), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    """Serve o arquivo HTML principal do frontend."""
+    index_path = "static/manage_chats.html"
+    try:
+        # Lê o conteúdo do arquivo HTML
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return HTMLResponse(content=content)
+    except FileNotFoundError:
+        print(f"Erro: Arquivo frontend não encontrado em '{index_path}'")
+        raise HTTPException(status_code=404, detail="Frontend file not found.")
+    except Exception as e:
+        print(f"Erro ao ler arquivo frontend '{index_path}': {e}")
+        raise HTTPException(status_code=500, detail="Error reading frontend file.")
 
 # <<< MODIFICADO: Retorna lista de ChatInfo (ID + Descrição) >>>
 @app.get("/v1/chats", response_model=List[ChatInfo])
