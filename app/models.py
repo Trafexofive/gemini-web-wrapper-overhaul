@@ -1,16 +1,13 @@
-# models.py
+# app/models.py
 from pydantic import BaseModel, Field
-# <<< MODIFICADO: Adicionado Literal para validar modos >>>
 from typing import List, Literal, Optional, Union, Dict, Any
 import uuid
 import time
 
-# --- Constantes de Modos (opcional, mas bom para referência) ---
-# Poderia carregar de um config, mas vamos definir aqui por enquanto
-ALLOWED_MODES = Literal["Default", "Code", "Architect", "Debug", "Ask"]
+# Import central ALLOWED_MODES definition
+from app.config import ALLOWED_MODES
 
 # --- Modelos Pydantic para Conteúdo Multi-Modal ---
-# (TextBlock, ImageUrlDetail, ImageUrlBlock, ContentType - iguais a antes)
 class TextBlock(BaseModel): type: Literal["text"]; text: str
 class ImageUrlDetail(BaseModel): url: str
 class ImageUrlBlock(BaseModel): type: Literal["image_url"]; image_url: ImageUrlDetail
@@ -35,18 +32,17 @@ class ChatCompletionResponse(OriginalChatCompletionResponse):
     chat_id: str = Field(..., description="ID of the chat session used for this response.")
 
 
-# <<< MODIFICADO: Adicionado campo 'mode' >>>
+# --- Modelos Pydantic Específicos da API ---
 class CreateChatRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=255)
-    # Usa Literal para validar os modos permitidos, opcional
-    mode: Optional[ALLOWED_MODES] = "Default" # Default se não for enviado
+    # Use imported ALLOWED_MODES for validation
+    mode: Optional[ALLOWED_MODES] = "Default" # Default if not sent
 
-# <<< MODIFICADO: Adicionado campo 'mode' >>>
 class ChatInfo(BaseModel):
     chat_id: str
     description: str | None
-    mode: str | None # O modo pode ser nulo se não foi definido
+    mode: str | None # Mode can be null if not defined or if it's 'Default' conceptually
 
 class UpdateChatModeRequest(BaseModel):
-    # Recebe o novo modo, validado pela Literal ALLOWED_MODES
+    # Receive the new mode, validated by imported ALLOWED_MODES
     mode: ALLOWED_MODES

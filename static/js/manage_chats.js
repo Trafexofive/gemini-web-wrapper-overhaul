@@ -1,184 +1,362 @@
 // static/js/manage_chats.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Elementos da UI ---
-    const chatListDiv = document.getElementById('chatList');
-    const chatDescriptionInput = document.getElementById('chatDescription');
-    const chatModeSelectCreate = document.getElementById('chatMode'); // Select do form de criação
-    const btnCreateChat = document.getElementById('btnCreateChat');
-    const btnRefreshList = document.getElementById('btnRefreshList');
-    const statusMessageDiv = document.getElementById('statusMessage');
+    // --- Configuration ---
+    const API_BASE_URL = 'http://localhost:8022';
+    const AVAILABLE_MODES = ["Default", "Code", "Architect", "Debug", "Ask"]; // Use const
 
-    // <<< ADICIONADO: Verificações de Nulo >>>
-    if (!chatListDiv) console.error("DEBUG ERROR: Elemento 'chatList' não encontrado!");
-    if (!chatDescriptionInput) console.error("DEBUG ERROR: Elemento 'chatDescription' não encontrado!");
-    if (!chatModeSelectCreate) console.error("DEBUG ERROR: Elemento 'chatMode' (select criação) não encontrado!");
-    if (!btnCreateChat) console.error("DEBUG ERROR: Elemento 'btnCreateChat' não encontrado!");
-    if (!btnRefreshList) console.error("DEBUG ERROR: Elemento 'btnRefreshList' não encontrado!");
-    if (!statusMessageDiv) console.error("DEBUG ERROR: Elemento 'statusMessage' não encontrado!");
-    // <<< FIM DAS VERIFICAÇÕES >>>
+    // --- State ---
+    const state = {
+        currentActiveChatId: null,
+        currentChatList: [],
+        statusTimeout: null,
+    };
 
+    // --- DOM Elements ---
+    const elements = {
+        chatListDiv: document.getElementById('chatList'),
+        chatDescriptionInput: document.getElementById('chatDescription'),
+        chatModeSelectCreate: document.getElementById('chatMode'),
+        btnCreateChat: document.getElementById('btnCreateChat'),
+        btnRefreshList: document.getElementById('btnRefreshList'),
+        statusMessageDiv: document.getElementById('statusMessage'),
+    };
 
-    // --- Configurações ---
-    const API_BASE_URL = 'http://localhost:8050';
-    const availableModes = ["Default", "Code", "Architect", "Debug", "Ask"];
+    // Basic validation that essential elements exist
+    for (const key in elements) {
+        if (!elements[key]) {
+            console.error(`ERROR: UI Element '${key}' not found! Check HTML ID.`);
+            // Optional: Halt execution if critical elements missing
+            if (key === 'chatListDiv' || key === 'statusMessageDiv') {
+                 document.body.innerHTML = `<h1>Error: Critical UI element missing (${key}). Cannot initialize application.</h1>`;
+                 return;
+            }
+        }
+    }
 
-    // --- Estado do Frontend ---
-    let currentActiveChatId = null;
-    let currentChatList = [];
-    let statusTimeout;
-
-    // --- Funções da API (fetchChatsAndActive, renderChatList, createChat, etc...) ---
-    // (Cole aqui as funções completas da resposta anterior - #32)
-    // Elas não precisam de alteração para este erro específico.
-    // Vou colar elas aqui para garantir que está completo:
-
-    async function fetchChatsAndActive() {
-        showMessage('Buscando chats e status ativo...', false);
-        chatListDiv.innerHTML = '<p>Carregando lista de chats...</p>';
-        currentChatList = [];
+    // --- API Service ---
+    /**
+     * Generic fetch wrapper for API calls. Handles common error checking.
+     * @param {string} endpoint - API endpoint (e.g., '/v1/chats')
+     * @param {object} options - Fetch options (method, headers, body)
+     * @returns {Promise<any>} - Promise resolving with JSON data or null for 204
+     * @throws {Error} - Throws an error for network issues or non-ok responses
+     */
+    async function _fetchApi(endpoint, options = {}) {
+        const url = `${API_BASE_URL}${endpoint}`;
         try {
-            const activeResponse = await fetch(`${API_BASE_URL}/v1/chats/active`);
-            if (!activeResponse.ok) { const eT = await activeResponse.text(); throw new Error(`Chat ativo: ${activeResponse.status} ${eT}`);}
-            const activeData = await activeResponse.json();
-            currentActiveChatId = activeData.active_chat_id;
-            console.log("Active Chat ID:", currentActiveChatId); // Log ID ativo
+            const response = await fetch(url, options);
 
-            const listResponse = await fetch(`${API_BASE_URL}/v1/chats`);
-            if (!listResponse.ok) { const eT = await listResponse.text(); throw new Error(`Lista chats: ${listResponse.status} ${eT}`);}
-            currentChatList = await listResponse.json();
+            if (!response.ok) {
+                let errorDetail = `HTTP error ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorDetail = errorData.detail || JSON.stringify(errorData) || errorDetail;
+                } catch (e) {
+                    errorDetail = response.statusText || errorDetail;
+                }
+                throw new Error(`API Error (${response.status}): ${errorDetail}`);
+            }
 
-            renderChatList(currentChatList);
-            showMessage('Lista de chats atualizada.', false);
+            if (response.status === 204) {
+                return null; // Handle No Content
+            }
+            return await response.json(); // Assume JSON for other success cases
+
         } catch (error) {
-            console.error('Erro fetchChatsAndActive:', error);
-            renderChatList([]); showMessage(`Erro ao buscar dados: ${error.message}`, true);
-            currentActiveChatId = null;
+            console.error(`Workspace failed for ${url}:`, error);
+            throw error; // Re-throw for the caller to handle UI feedback
         }
     }
 
-    function renderChatList(chats) {
-        chatListDiv.innerHTML = '';
-        if (!chats || chats.length === 0) { chatListDiv.innerHTML = '<p>Nenhum chat encontrado.</p>'; return; }
-        const table = document.createElement('table');
-        table.innerHTML = `<thead><tr><th class="col-desc">Descrição</th><th class="col-mode">Modo</th><th class="col-id">Chat ID</th><th class="col-actions">Ações</th></tr></thead><tbody></tbody>`;
-        const tbody = table.querySelector('tbody');
-        chats.forEach(chat => {
-            const isActive = (chat.chat_id === currentActiveChatId);
-            const tr = document.createElement('tr');
-            const tdDesc = document.createElement('td'); tdDesc.innerHTML = chat.description || '<em>Sem descrição</em>'; tr.appendChild(tdDesc);
-            const tdMode = document.createElement('td'); const modeSelect = document.createElement('select'); modeSelect.dataset.chatId = chat.chat_id; modeSelect.title = "Mudar modo";
-            availableModes.forEach(modeOption => {
-                const option = document.createElement('option'); option.value = modeOption; option.textContent = modeOption;
-                if ((chat.mode || "Default") === modeOption) { option.selected = true; }
-                modeSelect.appendChild(option);
+    // Namespaced API functions using the helper
+    const api = {
+        getActiveChatId: () => _fetchApi('/v1/chats/active'),
+        getChats: () => _fetchApi('/v1/chats'),
+        createChat: (description, mode) => _fetchApi('/v1/chats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: description || null, mode: mode }),
+        }),
+        updateChatMode: (chatId, newMode) => _fetchApi(`/v1/chats/${chatId}/mode`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: newMode }),
+        }),
+        setActiveChat: (chatId) => _fetchApi('/v1/chats/active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId }),
+        }),
+        deactivateChat: () => _fetchApi('/v1/chats/active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: null }),
+        }),
+        deleteChat: (chatId) => _fetchApi(`/v1/chats/${chatId}`, { method: 'DELETE' }),
+    };
+
+
+    // --- UI Manager ---
+    const ui = {
+        /** Shows a status message to the user. */
+        showMessage: (message, isError = false) => {
+            if (!elements.statusMessageDiv) return;
+            elements.statusMessageDiv.textContent = message;
+            elements.statusMessageDiv.className = isError ? 'status-error' : 'status-success';
+            elements.statusMessageDiv.style.display = 'block';
+
+            clearTimeout(state.statusTimeout);
+            state.statusTimeout = setTimeout(() => {
+                if (elements.statusMessageDiv) elements.statusMessageDiv.style.display = 'none';
+            }, 5000);
+        },
+
+        /** Renders the list of chats in the table. */
+        renderChatList: () => {
+            const chats = state.currentChatList;
+            const activeId = state.currentActiveChatId;
+
+            if (!elements.chatListDiv) return; // Guard against missing element
+
+            // Ensure the table structure exists, create if not
+             let tbody = elements.chatListDiv.querySelector('tbody');
+             if (!tbody) {
+                elements.chatListDiv.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-desc">Descrição</th>
+                                <th class="col-mode">Modo</th>
+                                <th class="col-id">Chat ID</th>
+                                <th class="col-actions">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                     </table>`;
+                tbody = elements.chatListDiv.querySelector('tbody'); // Get the new tbody
+             }
+
+            // Clear only the tbody content
+            tbody.innerHTML = '';
+
+            if (!chats || chats.length === 0) {
+                // If table exists but no chats, show message inside div, replacing table
+                elements.chatListDiv.innerHTML = '<p>Nenhum chat encontrado.</p>';
+                return;
+            }
+
+            // Use DocumentFragment for efficient bulk appending
+            const fragment = document.createDocumentFragment();
+            chats.forEach(chat => {
+                const isActive = (chat.chat_id === activeId);
+                const tr = document.createElement('tr');
+                // Store chat data directly on the row for delegation handlers
+                tr.dataset.chatId = chat.chat_id;
+                tr.dataset.chatDesc = chat.description || chat.chat_id;
+
+                tr.innerHTML = `
+                    <td>${chat.description || '<em>Sem descrição</em>'}</td>
+                    <td>
+                        <select class="mode-select" title="Mudar modo">
+                            ${AVAILABLE_MODES.map(modeOption => `
+                                <option value="${modeOption}" ${ (chat.mode || "Default") === modeOption ? 'selected' : '' }>
+                                    ${modeOption}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </td>
+                    <td><code>${chat.chat_id}</code></td>
+                    <td>
+                        <button
+                            class="btn-activate ${isActive ? 'btn-is-active' : 'btn-set-active'}"
+                            data-action="${isActive ? 'deactivate' : 'activate'}"
+                            title="${isActive ? 'Ativo (Clique p/ desativar)' : 'Definir como ativo'}"
+                        >
+                            ${isActive ? 'Ativo' : 'Definir Ativo'}
+                        </button>
+                        <button
+                            class="btn-delete"
+                            data-action="delete"
+                            title="Deletar chat"
+                        >
+                            Deletar
+                        </button>
+                    </td>
+                `;
+                fragment.appendChild(tr);
             });
-            modeSelect.addEventListener('change', handleModeChange); tdMode.appendChild(modeSelect); tr.appendChild(tdMode);
-            const tdId = document.createElement('td'); tdId.innerHTML = `<code>${chat.chat_id}</code>`; tr.appendChild(tdId);
-            const tdActions = document.createElement('td'); const activateButton = document.createElement('button'); activateButton.dataset.chatId = chat.chat_id;
-            if (isActive) { activateButton.textContent = 'Ativo'; activateButton.className = 'btn-is-active'; activateButton.title = 'Ativo (Clique p/ desativar)'; activateButton.addEventListener('click', () => deactivateChat()); }
-            else { activateButton.textContent = 'Definir Ativo'; activateButton.className = 'btn-set-active'; activateButton.title = 'Definir como ativo'; activateButton.addEventListener('click', () => setActiveChat(chat.chat_id)); }
-            tdActions.appendChild(activateButton);
-            const deleteButton = document.createElement('button'); deleteButton.textContent = 'Deletar'; deleteButton.className = 'btn-delete'; deleteButton.dataset.chatId = chat.chat_id; deleteButton.dataset.chatDesc = chat.description || chat.chat_id; deleteButton.title = 'Deletar chat'; deleteButton.addEventListener('click', (e) => deleteChat(e.target.dataset.chatId, e.target.dataset.chatDesc)); tdActions.appendChild(deleteButton);
-            tr.appendChild(tdActions); tbody.appendChild(tr);
-        });
-        chatListDiv.appendChild(table);
-    }
+            tbody.appendChild(fragment);
+        },
 
-    async function createChat() {
-        if (!chatDescriptionInput || !chatModeSelectCreate) { // Checagem extra
-             showMessage("Erro: Elementos do formulário não encontrados.", true); return;
+        /** Populates the 'Create Chat' mode select dropdown. */
+        populateCreateModeSelect: () => {
+            if (!elements.chatModeSelectCreate) return;
+            elements.chatModeSelectCreate.innerHTML = ''; // Clear existing options
+            AVAILABLE_MODES.forEach(mode => {
+                const option = document.createElement('option');
+                option.value = mode;
+                option.textContent = mode;
+                elements.chatModeSelectCreate.appendChild(option);
+            });
+             elements.chatModeSelectCreate.value = "Default"; // Set default
+        },
+
+         /** Clears the create chat form inputs. */
+        clearCreateForm: () => {
+            if (elements.chatDescriptionInput) elements.chatDescriptionInput.value = '';
+            if (elements.chatModeSelectCreate) elements.chatModeSelectCreate.value = "Default";
         }
-        const description = chatDescriptionInput.value.trim();
-        const mode = chatModeSelectCreate.value;
-        showMessage(`Criando chat (Modo: ${mode})...`, false);
+    };
+
+    // --- Event Handlers ---
+
+    /** Main function to refresh chat list and active status from API. */
+    async function refreshChatData() {
+        ui.showMessage('Buscando chats e status ativo...', false);
+        if(elements.chatListDiv) elements.chatListDiv.innerHTML = '<p>Carregando lista de chats...</p>';
+
         try {
-            const response = await fetch(`${API_BASE_URL}/v1/chats`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: description || null, mode: mode }) });
-            if (!response.ok) { const e = await response.json().catch(()=>({detail:`Erro ${response.status}`})); throw new Error(`${response.status} - ${e.detail}`); }
-            const newChatId = await response.json(); showMessage(`Chat "${description||newChatId}" (Modo: ${mode}) criado. ID: ${newChatId}`, false);
-            chatDescriptionInput.value = ''; chatModeSelectCreate.value = "Default"; fetchChatsAndActive();
-        } catch (error) { console.error('Erro createChat:', error); showMessage(`Erro ao criar: ${error.message}`, true); }
+            const [chatsData, activeData] = await Promise.all([
+                api.getChats(),
+                api.getActiveChatId()
+            ]);
+
+            state.currentChatList = chatsData || [];
+            state.currentActiveChatId = activeData?.active_chat_id ?? null;
+
+            ui.renderChatList(); // Render based on updated state
+            // Only show success if not initially empty, prevent message flashing on load
+             if (state.currentChatList.length > 0) {
+                  ui.showMessage('Lista de chats atualizada.', false);
+             } else if (!elements.chatListDiv.querySelector('p')) {
+                 // If the list is empty but no "Nenhum chat" message is shown yet, show status briefly.
+                 ui.showMessage('Nenhum chat encontrado.', false);
+             }
+            console.log("Active Chat ID:", state.currentActiveChatId);
+
+        } catch (error) {
+            state.currentChatList = [];
+            state.currentActiveChatId = null;
+            ui.renderChatList(); // Render empty state
+            ui.showMessage(`Erro ao buscar dados: ${error.message}`, true);
+        }
     }
 
-    function handleModeChange(event) { const selectElement = event.target; const chatId = selectElement.dataset.chatId; const newMode = selectElement.value; updateChatMode(chatId, newMode); }
-
-    async function updateChatMode(chatId, newMode) {
-        showMessage(`Atualizando modo do chat ${chatId} para ${newMode}...`, false);
+    /** Handles creating a new chat. */
+    async function handleCreateChat() {
+        const description = elements.chatDescriptionInput?.value.trim(); // Use optional chaining
+        const mode = elements.chatModeSelectCreate?.value;
+        if (mode === undefined) { // Check if element exists via value
+             ui.showMessage("Erro: Elemento de modo não encontrado.", true); return;
+        }
+        ui.showMessage(`Criando chat (Modo: ${mode})...`, false);
         try {
-            const response = await fetch(`${API_BASE_URL}/v1/chats/${chatId}/mode`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: newMode }) });
-            if (!response.ok) { const e = await response.json().catch(()=>({detail:`Erro ${response.status}`})); throw new Error(`${response.status} - ${e.detail}`); }
-            const result = await response.json(); showMessage(result.message || `Modo de ${chatId} atualizado.`, false);
-            fetchChatsAndActive();
-        } catch (error) { console.error('Erro updateChatMode:', error); showMessage(`Erro ao atualizar modo: ${error.message}`, true); fetchChatsAndActive(); }
+            const newChatData = await api.createChat(description, mode);
+            ui.showMessage(`Chat "${description || newChatData.chat_id}" (Modo: ${mode}) criado. ID: ${newChatData.chat_id}`, false);
+            ui.clearCreateForm();
+            await refreshChatData();
+        } catch (error) {
+            ui.showMessage(`Erro ao criar chat: ${error.message}`, true);
+        }
     }
 
-    async function setActiveChat(chatId) {
-        showMessage(`Definindo chat ${chatId} como ativo...`, false);
+    /** Handles clicks within the chat list table body (Event Delegation). */
+    async function handleTableClick(event) {
+        const target = event.target;
+        const actionButton = target.closest('button[data-action]');
+
+        if (!actionButton) return;
+
+        const row = actionButton.closest('tr');
+        const chatId = row?.dataset.chatId; // Get ID from row
+        const action = actionButton.dataset.action;
+
+        if (!chatId || !action) return;
+
+        console.log(`Table Click - Action: ${action}, Chat ID: ${chatId}`);
+
+        if (action === 'activate') {
+            ui.showMessage(`Definindo chat ${chatId} como ativo...`, false);
+            try {
+                const result = await api.setActiveChat(chatId);
+                ui.showMessage(result.message || `Chat ${chatId} agora está ativo.`, false);
+                await refreshChatData();
+            } catch (error) {
+                ui.showMessage(`Erro ao ativar chat ${chatId}: ${error.message}`, true);
+            }
+        } else if (action === 'deactivate') {
+             ui.showMessage(`Desativando chat ativo...`, false);
+            try {
+                 const result = await api.deactivateChat();
+                 ui.showMessage(result.message || `Chat ativo desativado.`, false);
+                 await refreshChatData();
+            } catch (error) {
+                 ui.showMessage(`Erro ao desativar chat: ${error.message}`, true);
+            }
+        } else if (action === 'delete') {
+            const chatDesc = row.dataset.chatDesc || chatId; // Get desc from row
+            if (!confirm(`Deletar chat "${chatDesc}" (ID: ${chatId})?`)) return;
+            ui.showMessage(`Deletando chat ${chatId}...`, false);
+            try {
+                await api.deleteChat(chatId);
+                ui.showMessage(`Chat ${chatId} deletado.`, false);
+                await refreshChatData();
+            } catch (error) {
+                ui.showMessage(`Erro ao deletar chat ${chatId}: ${error.message}`, true);
+            }
+        }
+    }
+
+     /** Handles mode changes within the chat list table body (Event Delegation). */
+    async function handleTableModeChange(event) {
+        const target = event.target;
+
+        if (!target.matches('select.mode-select')) return; // Target the select directly
+
+        const selectElement = target;
+        const row = selectElement.closest('tr');
+        const chatId = row?.dataset.chatId; // Get ID from row
+        const newMode = selectElement.value;
+
+        if (!chatId) return;
+
+        console.log(`Table Mode Change - Chat ID: ${chatId}, New Mode: ${newMode}`);
+
+         ui.showMessage(`Atualizando modo do chat ${chatId} para ${newMode}...`, false);
         try {
-            const response = await fetch(`${API_BASE_URL}/v1/chats/active`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId }) });
-            if (!response.ok) { const e = await response.json().catch(()=>({detail:`Erro ${response.status}`})); throw new Error(`${response.status} - ${e.detail}`); }
-            const result = await response.json(); showMessage(result.message || `Chat ${chatId} ativo.`, false);
-            fetchChatsAndActive();
-        } catch (error) { console.error('Erro setActiveChat:', error); showMessage(`Erro ao ativar: ${error.message}`, true); }
-    }
-
-     async function deactivateChat() {
-        showMessage(`Desativando chat ativo...`, false);
-        try {
-            const response = await fetch(`${API_BASE_URL}/v1/chats/active`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: null }) });
-            if (!response.ok) { const e = await response.json().catch(()=>({detail:`Erro ${response.status}`})); throw new Error(`${response.status} - ${e.detail}`); }
-            const result = await response.json(); showMessage(result.message || `Chat ativo desativado.`, false);
-            fetchChatsAndActive();
-        } catch (error) { console.error('Erro deactivateChat:', error); showMessage(`Erro ao desativar: ${error.message}`, true); }
-    }
-
-    async function deleteChat(chatId, chatDesc) {
-        if (!confirm(`Deletar chat "${chatDesc}" (ID: ${chatId})?`)) return;
-        showMessage(`Deletando chat ${chatId}...`, false);
-        try {
-            const response = await fetch(`${API_BASE_URL}/v1/chats/${chatId}`, { method: 'DELETE' });
-            if (response.status === 204) { showMessage(`Chat ${chatId} deletado.`, false); fetchChatsAndActive(); }
-            else { const e = await response.json().catch(()=>({detail:`Erro ${response.status}`})); throw new Error(`${response.status} - ${e.detail}`); }
-        } catch (error) { console.error('Erro deleteChat:', error); showMessage(`Erro ao deletar ${chatId}: ${error.message}`, true); }
-    }
-
-    function showMessage(message, isError = false) {
-        if(!statusMessageDiv) return; // Não tenta mostrar se o elemento não existe
-        statusMessageDiv.textContent = message; statusMessageDiv.className = isError ? 'status-error' : 'status-success'; statusMessageDiv.style.display = 'block';
-        clearTimeout(statusTimeout); statusTimeout = setTimeout(() => { statusMessageDiv.style.display = 'none'; }, 5000);
-    }
-
-    // --- Event Listeners Iniciais ---
-    // <<< ADICIONADO: Verificações antes de adicionar listener >>>
-    if (btnRefreshList) {
-        btnRefreshList.addEventListener('click', fetchChatsAndActive);
-    } else {
-        console.error("Falha ao adicionar listener: Botão 'btnRefreshList' não encontrado.");
-    }
-
-    if (btnCreateChat) {
-        btnCreateChat.addEventListener('click', createChat);
-    } else {
-        console.error("Falha ao adicionar listener: Botão 'btnCreateChat' não encontrado.");
+            const result = await api.updateChatMode(chatId, newMode);
+            ui.showMessage(result.message || `Modo do chat ${chatId} atualizado para ${newMode}.`, false);
+            await refreshChatData(); // Refresh to ensure UI consistency
+        } catch (error) {
+             ui.showMessage(`Erro ao atualizar modo do chat ${chatId}: ${error.message}`, true);
+             // Revert UI optimistically on error? Or let refresh handle it?
+             // For simplicity, let refresh handle visual state.
+             await refreshChatData(); // Refresh even on error to show actual state
+        }
     }
 
 
-    // --- Carga Inicial ---
-    // Popula as opções do select de criação dinamicamente
-    if (chatModeSelectCreate) { // Verifica se o select existe
-        availableModes.forEach(mode => {
-            const option = document.createElement('option');
-            option.value = mode;
-            option.textContent = mode;
-            chatModeSelectCreate.appendChild(option);
-        });
-        console.log("Select de modo populado."); // Log de sucesso
-    } else {
-        console.error("Falha ao popular modos: Select 'chatMode' (criação) não encontrado.");
+    // --- Event Listeners Setup ---
+    function setupEventListeners() {
+        // Static element listeners
+        elements.btnRefreshList?.addEventListener('click', refreshChatData);
+        elements.btnCreateChat?.addEventListener('click', handleCreateChat);
+
+        // Event Delegation listeners on the container div
+        elements.chatListDiv?.addEventListener('click', handleTableClick);
+        elements.chatListDiv?.addEventListener('change', handleTableModeChange);
     }
 
-    // Busca os dados iniciais ao carregar a página
-    fetchChatsAndActive();
-    console.log("Gerenciador de Chats inicializado.");
+    // --- Initialization ---
+    function initialize() {
+        console.log("Initializing Chat Manager...");
+        ui.populateCreateModeSelect();
+        setupEventListeners();
+        refreshChatData(); // Load initial data
+        console.log("Chat Manager Initialized.");
+    }
 
-}); // Fim do DOMContentLoaded
+    initialize(); // Start
+
+}); // End DOMContentLoaded
