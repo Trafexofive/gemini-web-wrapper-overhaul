@@ -3,6 +3,7 @@ import uuid
 import base64
 import tempfile
 import os
+import re
 import mimetypes
 import traceback
 from typing import List, Optional, Dict, Any
@@ -316,6 +317,7 @@ class ChatService:
 
         # 3. Process User Input (Text & Images)
         last_user_message = next((msg for msg in reversed(user_messages) if msg.role == "user"), None)
+
         if not last_user_message: raise HTTPException(status_code=400, detail="No user message found in the request.")
         user_message_text = ""
         image_urls_to_process = []
@@ -342,8 +344,18 @@ class ChatService:
         except Exception as proc_e:
              self._cleanup_temp_files(temp_file_paths); raise HTTPException(status_code=400, detail=f"Error processing user message content: {proc_e}")
 
+        mode_switch_match = re.search(r"\[switch_mode to '(.*?)' because:.*?\]", user_message_text, re.IGNORECASE | re.DOTALL)
+
+        if mode_switch_match:
+            extracted_mode = mode_switch_match.group(1)
+            extracted_mode = extracted_mode.title()
+            new_mode_prompt = MODE_PROMPT_TEXTS.get(extracted_mode)
+            final_prompt_to_send = f"Now you are in {extracted_mode} mode. Use the following prompt:\n {new_mode_prompt}\n\n{user_message_text}"
+
+        else:
+            final_prompt_to_send = user_message_text
+
         # 4. Prepare Final Prompt (User message ONLY)
-        final_prompt_to_send = user_message_text
         print("Service: Preparing user message only for completion endpoint.")
 
         # 5. Send to Gemini & Handle Response/State Update
