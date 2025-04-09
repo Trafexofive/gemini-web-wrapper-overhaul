@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the current directory contents into the container at /app
 COPY . /app
 
-# Make port 8000 available to the world outside this container
-EXPOSE 8000
+# Make port 8099 available to the world outside this container
+EXPOSE 8099
 
-# Run the command to start the application
-CMD ["python", "gemini_api.py"]
+# Run the command to start the application using uvicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8099", "--reload"]

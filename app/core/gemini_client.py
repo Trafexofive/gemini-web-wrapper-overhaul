@@ -13,10 +13,6 @@ class GeminiClientWrapper:
 
     def __init__(self):
         self._client: Optional[GeminiClient] = None
-        # If the cookie values are set in the environment, they will be used to initialize the client.
-        # Otherwise, the client will try to get it itself.
-        self._Secure_1PSID = os.getenv("Secure_1PSID", None)
-        self._Secure_1PSIDTS = os.getenv("Secure_1PSIDTS", None)
 
     async def init_client(self, timeout: int = 180):
         """Initializes the GeminiClient."""
@@ -28,8 +24,6 @@ class GeminiClientWrapper:
         try:
             # Consider proxy settings if needed from config
             temp_client = GeminiClient(
-                self._Secure_1PSID,
-                self._Secure_1PSIDTS,
                 proxy=None
             )
             # Use specified timeout, auto_close=False, auto_refresh=True
