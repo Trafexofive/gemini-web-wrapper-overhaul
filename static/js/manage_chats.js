@@ -126,10 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <table>
                         <thead>
                             <tr>
-                                <th class="col-desc">Descrição</th>
-                                <th class="col-mode">Modo</th>
+                                <th class="col-desc">Description</th>
+                                <th class="col-mode">Mode</th>
                                 <th class="col-id">Chat ID</th>
-                                <th class="col-actions">Ações</th>
+                                <th class="col-actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -171,16 +171,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button
                             class="btn-activate ${isActive ? 'btn-is-active' : 'btn-set-active'}"
                             data-action="${isActive ? 'deactivate' : 'activate'}"
-                            title="${isActive ? 'Ativo (Clique p/ desativar)' : 'Definir como ativo'}"
+                            title="${isActive ? 'Active (Click to deactivate)' : 'Make active'}"
                         >
-                            ${isActive ? 'Ativo' : 'Definir Ativo'}
+                            ${isActive ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
                             class="btn-delete"
                             data-action="delete"
-                            title="Deletar chat"
+                            title="Delete chat"
                         >
-                            Deletar
+                            Delete
                         </button>
                     </td>
                 `;
@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Main function to refresh chat list and active status from API. */
     async function refreshChatData() {
         ui.showMessage('Buscando chats e status ativo...', false);
-        if(elements.chatListDiv) elements.chatListDiv.innerHTML = '<p>Carregando lista de chats...</p>';
+        if(elements.chatListDiv) elements.chatListDiv.innerHTML = '<p>Loading chats list...</p>';
 
         try {
             const [chatsData, activeData] = await Promise.all([
@@ -228,10 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.renderChatList(); // Render based on updated state
             // Only show success if not initially empty, prevent message flashing on load
              if (state.currentChatList.length > 0) {
-                  ui.showMessage('Lista de chats atualizada.', false);
+                  ui.showMessage('Chats list updated.', false);
              } else if (!elements.chatListDiv.querySelector('p')) {
                  // If the list is empty but no "Nenhum chat" message is shown yet, show status briefly.
-                 ui.showMessage('Nenhum chat encontrado.', false);
+                 ui.showMessage('No chat found.', false);
              }
             console.log("Active Chat ID:", state.currentActiveChatId);
 
@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentChatList = [];
             state.currentActiveChatId = null;
             ui.renderChatList(); // Render empty state
-            ui.showMessage(`Erro ao buscar dados: ${error.message}`, true);
+            ui.showMessage(`Error retrieving data: ${error.message}`, true);
         }
     }
 
@@ -250,10 +250,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mode === undefined) { // Check if element exists via value
              ui.showMessage("Erro: Elemento de modo não encontrado.", true); return;
         }
-        ui.showMessage(`Criando chat (Modo: ${mode})...`, false);
+        ui.showMessage(`Creating chat (Mode: ${mode})...`, false);
         try {
             const newChatData = await api.createChat(description, mode);
-            ui.showMessage(`Chat "${description || newChatData.chat_id}" (Modo: ${mode}) criado. ID: ${newChatData.chat_id}`, false);
+            ui.showMessage(`Chat "${description || newChatData.chat_id}" (Mode: ${mode}) created. ID: ${newChatData.chat_id}`, false);
             ui.clearCreateForm();
             await refreshChatData();
         } catch (error) {
