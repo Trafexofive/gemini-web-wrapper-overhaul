@@ -17,7 +17,7 @@ This FastAPI application acts as a bridge, exposing an OpenAI-compatible `/v1/ch
 ## Limitations
 
 * Relies on the unofficial `gemini-webapi` and browser cookie authentication.
-* Currently requires the `prompts.py` file to be present at the project root for defining mode behaviors.
+* Currently, requires the `prompts.py` file to be present at the project root for defining mode behaviors.
 * Error handling and stability, particularly regarding `gemini-webapi` interactions, might require further testing and refinement.
 * You need to manually create/change the chats through the provided frontend.
 
@@ -47,7 +47,7 @@ The application code is organized within the `app/` directory:
 * `app/config.py`: Static configuration (DB URL, Gemini Model, Allowed Modes).
 * `app/models.py`: Pydantic models for API requests/responses.
 * `app/routers/`: Defines API endpoints (e.g., `chats.py`).
-    * `dependencies.py`: Reusable FastAPI dependencies.
+* `dependencies.py`: Reusable FastAPI dependencies.
 * `app/services/`: Contains business logic (`chat_service.py`). Manages state (cache, active chat).
 * `app/repositories/`: Handles data access (`chat_repository.py` for SQLite).
 * `app/core/`: Core components like the Gemini client wrapper (`gemini_client.py`).
