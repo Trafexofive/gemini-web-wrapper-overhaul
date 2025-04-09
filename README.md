@@ -19,6 +19,7 @@ This FastAPI application acts as a bridge, exposing an OpenAI-compatible `/v1/ch
 * Relies on the unofficial `gemini-webapi` and browser cookie authentication.
 * Currently requires the `prompts.py` file to be present at the project root for defining mode behaviors.
 * Error handling and stability, particularly regarding `gemini-webapi` interactions, might require further testing and refinement.
+* You need to manually create/change the chats through the provided frontend.
 
 ## Dependencies
 
@@ -50,7 +51,7 @@ The application code is organized within the `app/` directory:
 * `app/services/`: Contains business logic (`chat_service.py`). Manages state (cache, active chat).
 * `app/repositories/`: Handles data access (`chat_repository.py` for SQLite).
 * `app/core/`: Core components like the Gemini client wrapper (`gemini_client.py`).
-* `prompts.py`: (Located at project root) Defines the system prompts for different modes.
+* `prompts/prompts.py`: Defines the system prompts for different modes.
 * `static/`: Contains frontend HTML, CSS, and JavaScript files.
 
 ## Configuration
@@ -65,15 +66,17 @@ Ensure you are in the project root directory (the one containing the `app/` dire
 
 Run using Uvicorn:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8099 --reload
 ```
-* Replace `8000` with your desired port.
+* Replace `8099` with your desired port.
 * The `--reload` flag enables auto-reloading during development. Remove it for production.
 * The server will listen on the specified port on all network interfaces. Check console output for startup confirmation and potential errors.
 
 ## API Usage / Session Management
 
 This application manages multiple chat sessions. The `/v1/chat/completions` endpoint always operates on the currently **active** session.
+
+## The below is only valid if you prefer to manage the chats through requests (E.g.: Postman, curl etc)
 
 **Workflow:**
 
@@ -102,7 +105,7 @@ This application manages multiple chat sessions. The `/v1/chat/completions` endp
     * Permanently deletes the specified chat session.
 
 **Roo Code Configuration:**
-* Point Roo Code to use the API Base URL: `http://<server-ip>:<port>/v1` (e.g., `http://localhost:8000/v1`).
+* Point Roo Code to use the API Base URL: `http://<server-ip>:<port>/v1` (e.g., `http://localhost:8099/v1`).
 * Ensure that Roo is **NOT** configured to use streaming responses.
 
 ## Web UI
