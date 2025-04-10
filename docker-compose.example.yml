@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     image: gemini-web-wrapper
     ports:
-      - "8099:8099"
+      - "8022:8022"
     volumes:
       - "browser_user:/root/.mozilla/firefox"
     stdin_open: true  # equivalent to -i in docker run

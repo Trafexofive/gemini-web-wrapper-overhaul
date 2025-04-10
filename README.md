@@ -66,7 +66,7 @@ Ensure you are in the project root directory (the one containing the `app/` dire
 
 Run using Uvicorn:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8099 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8022 --reload
 ```
 * Replace `8099` with your desired port.
 * The `--reload` flag enables auto-reloading during development. Remove it for production.
@@ -105,7 +105,7 @@ This application manages multiple chat sessions. The `/v1/chat/completions` endp
     * Permanently deletes the specified chat session.
 
 **Roo Code Configuration:**
-* Point Roo Code to use the API Base URL: `http://<server-ip>:<port>/v1` (e.g., `http://localhost:8099/v1`).
+* Point Roo Code to use the API Base URL: `http://<server-ip>:<port>/v1` (e.g., `http://localhost:8022/v1`).
 * Ensure that Roo is **NOT** configured to use streaming responses.
 
 ## Web UI
