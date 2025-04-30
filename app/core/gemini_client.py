@@ -1,4 +1,5 @@
 # app/core/gemini_client.py
+import os
 import traceback
 from typing import Optional, List, Dict, Any
 
@@ -22,7 +23,9 @@ class GeminiClientWrapper:
         print(f"Initializing Gemini Client (Timeout: {timeout}s)...")
         try:
             # Consider proxy settings if needed from config
-            temp_client = GeminiClient(proxy=None)
+            temp_client = GeminiClient(
+                proxy=None
+            )
             # Use specified timeout, auto_close=False, auto_refresh=True
             await temp_client.init(timeout=timeout, auto_close=False, auto_refresh=True)
             self._client = temp_client
