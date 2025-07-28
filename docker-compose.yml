@@ -1,0 +1,61 @@
+
+services:
+  gemini-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: gemini-web-wrapper-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - "browser_user:/root/.mozilla/firefox"
+      - "./static:/app/static"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+    stdin_open: true
+    tty: true
+    networks:
+      - gemini-network
+
+  gemini-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: gemini-web-wrapper-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gemini-api
+    environment:
+      - NODE_ENV=production
+    networks:
+      - gemini-network
+
+  gemini-tui:
+    build:
+      context: ./tui
+      dockerfile: Dockerfile
+    image: gemini-web-wrapper-tui
+    depends_on:
+      - gemini-api
+    environment:
+      - API_BASE_URL=http://gemini-api:8000
+    stdin_open: true
+    tty: true
+    networks:
+      - gemini-network
+    profiles:
+      - tui
+
+volumes:
+  browser_user:
+    driver: local
+    driver_opts:
+      type: none
+      device: ~/.mozilla/firefox
+      o: bind
+
+networks:
+  gemini-network:
+    driver: bridge
+

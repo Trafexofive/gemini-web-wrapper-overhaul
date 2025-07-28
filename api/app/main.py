@@ -15,8 +15,8 @@ from app.routers.chats import router as chats_router
 
 # Determine paths relative to this main.py file
 current_script_dir = Path(__file__).parent
-# Static files are one level up from 'app' directory
-static_dir_path = (current_script_dir.parent / "static").resolve()
+# Static files are now two levels up from 'app' directory (api/app -> api -> ..)
+static_dir_path = (current_script_dir.parent.parent / "static").resolve()
 # Extract DB path from config URL
 db_path = DATABASE_URL.split("///")[-1]
 

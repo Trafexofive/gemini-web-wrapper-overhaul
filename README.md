@@ -1,132 +1,280 @@
-# Gemini WebAPI to OpenAI API Bridge (Multi-Session & Modes)
+# Gemini Web Wrapper with Portainer
 
-This FastAPI application acts as a bridge, exposing an OpenAI-compatible `/v1/chat/completions` endpoint that internally uses the unofficial [gemini-webap](https://github.com/HanaokaYuzu/Gemini-API) library to interact with Google Gemini Web. This allows tools configured for the OpenAI API (like Roo Code, configured NOT to use streaming) to potentially use Gemini as the backend model.
+A comprehensive Gemini API wrapper with session management, featuring a web interface, modern TUI client, and powerful CLI client.
 
-**Disclaimer:** This uses the unofficial `gemini-webapi` library, which relies on browser cookies for authentication. Changes to Google's web interface or authentication methods may break this library and, consequently, this bridge. Use at your own risk.
+## 🏗️ Project Structure
 
-## Key Features
+```
+gemini-web-wrapper-portainer/
+├── api/                    # Backend API files
+│   ├── app/               # FastAPI application
+│   │   ├── core/          # Core components (Gemini client)
+│   │   ├── models.py      # Pydantic models
+│   │   ├── main.py        # FastAPI app entry point
+│   │   ├── config.py      # Configuration
+│   │   ├── routers/       # API routes
+│   │   ├── services/      # Business logic
+│   │   ├── repositories/  # Data access layer
+│   │   └── prompts/       # System prompts
+│   ├── Dockerfile         # API container definition
+│   └── requirements.txt   # API dependencies
+├── tui/                   # Terminal User Interface
+│   ├── tui_client.py      # TUI application
+│   ├── Dockerfile         # TUI container definition
+│   ├── requirements.txt   # TUI dependencies
+│   ├── install_tui.sh     # Installation script
+│   └── README.md          # TUI documentation
+├── cli/                   # Command Line Interface
+│   ├── gemini-cli.sh      # Main CLI script
+│   ├── install.sh         # CLI installation script
+│   └── README.md          # CLI documentation
+├── static/                # Frontend web interface
+├── docker-compose.yml     # Docker services configuration
+├── Makefile              # Docker management commands
+├── main.py               # Root entry point for API
+├── requirements.txt      # Combined dependencies
+└── README.md            # This file
+```
 
-* **OpenAI-Compatible API:** Provides `/v1/chat/completions` endpoint.
-* **Multiple Chat Sessions:** Manage multiple independent chat conversations via API.
-* **Session Persistence:** Chat history and metadata are stored in a local SQLite database (`chat_sessions.db`).
-* **Chat Modes:** Supports different modes (e.g., `Code`, `Architect`, `Debug`, `Ask`, `Default`) with distinct system prompts defined in `prompts.py`.
-* **System Prompt Handling:** Automatically sends the appropriate system prompt when a chat session is first activated or when the mode of the active chat is changed.
-* **Image Support:** Accepts Base64-encoded images within requests using the OpenAI vision format.
-* **Simple Web UI:** Includes a basic web interface (served at `/`) for viewing, creating, deleting, activating, and changing the mode of chat sessions.
+## 🚀 Quick Start
 
-## Limitations
+### Option 1: Docker Compose (Recommended)
 
-* Relies on the unofficial `gemini-webapi` and browser cookie authentication.
-* Currently, requires the `prompts.py` file to be present at the project root for defining mode behaviors.
-* Error handling and stability, particularly regarding `gemini-webapi` interactions, might require further testing and refinement.
-* You need to manually create/change the chats through the provided frontend.
-
-## Dependencies
-
-* **Python 3.8+** (Tested primarily with Python 3.13)
-* **FastAPI:** For the web server framework.
-* **Uvicorn:** ASGI server to run FastAPI.
-* **gemini-webapi:** The core library interacting with Google Gemini Web.
-* **browser-cookie3:** Used by `gemini-webapi` for cookie access.
-* **aiosqlite:** For asynchronous SQLite database access.
-
-Install dependencies using:
 ```bash
+# Start API only
+docker-compose up gemini-api
+
+# Start both API and TUI
+docker-compose --profile tui up
+
+# Or use Makefile
+make up                    # API only
+make up profile=tui        # API + TUI
+```
+
+### Option 2: Local Development
+
+```bash
+# Install all dependencies
 pip install -r requirements.txt
+
+# Start the API server
+python main.py
+
+# In another terminal, start the TUI client
+cd tui
+python tui_client.py
 ```
 
-## Authentication
+### Option 3: Individual Docker Services
 
-`gemini-webapi` authenticates by accessing the cookies stored by your web browser. Therefore, **you must be logged into the Google Gemini website** (e.g., [https://gemini.google.com/app](https://gemini.google.com/app)) in your **default web browser** on the machine where you run this script. Ensure the browser is closed before running the script if you encounter cookie loading issues.
-
-## Project Structure
-
-The application code is organized within the `app/` directory:
-
-* `app/main.py`: Main FastAPI application instance, lifespan management, static file serving.
-* `app/config.py`: Static configuration (DB URL, Gemini Model, Allowed Modes).
-* `app/models.py`: Pydantic models for API requests/responses.
-* `app/routers/`: Defines API endpoints (e.g., `chats.py`).
-* `dependencies.py`: Reusable FastAPI dependencies.
-* `app/services/`: Contains business logic (`chat_service.py`). Manages state (cache, active chat).
-* `app/repositories/`: Handles data access (`chat_repository.py` for SQLite).
-* `app/core/`: Core components like the Gemini client wrapper (`gemini_client.py`).
-* `prompts/prompts.py`: Defines the system prompts for different modes.
-* `static/`: Contains frontend HTML, CSS, and JavaScript files.
-
-## Configuration
-
-* **Gemini Model:** Set the `GEMINI_MODEL_NAME` in `app/config.py`.
-* **Database:** The database file path (`chat_sessions.db`) is configured via `DATABASE_URL` in `app/config.py`.
-* **System Prompts:** The text for system prompts used by different modes is defined in `prompts.py` at the project root.
-
-## Running the Server
-
-Ensure you are in the project root directory (the one containing the `app/` directory and `requirements.txt`).
-
-Run using Uvicorn:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8022 --reload
+# Build and run API
+cd api
+docker build -t gemini-api .
+docker run -p 8000:8000 gemini-api
+
+# Build and run TUI
+cd tui
+docker build -t gemini-tui .
+docker run -it --rm gemini-tui
 ```
-* Replace `8099` with your desired port.
-* The `--reload` flag enables auto-reloading during development. Remove it for production.
-* The server will listen on the specified port on all network interfaces. Check console output for startup confirmation and potential errors.
 
-## API Usage / Session Management
+## 🖥️ TUI Client
 
-This application manages multiple chat sessions. The `/v1/chat/completions` endpoint always operates on the currently **active** session.
+The project includes a modern Terminal User Interface client:
 
-## The below is only valid if you prefer to manage the chats through requests (E.g.: Postman, curl etc)
+```bash
+# Navigate to TUI directory
+cd tui
 
-**Workflow:**
+# Install TUI dependencies
+pip install -r tui_requirements.txt
 
-1.  **List Existing Chats (Optional):** `GET /v1/chats`
-    * Returns a list of `ChatInfo` objects (`chat_id`, `description`, `mode`).
-2.  **Create a New Chat:** `POST /v1/chats`
-    * Body: `{ "description": "Optional description", "mode": "Optional ModeName" }` (Mode defaults to "Default").
-    * Returns the `chat_id` (string) of the newly created session.
-3.  **Activate a Chat:** `POST /v1/chats/active`
-    * Body: `{ "chat_id": "your-chat-id" }`
-    * Sets the specified chat as the active one for subsequent `/completions` requests.
-    * **Important:** This step also triggers sending the appropriate system prompt to the Gemini session if it hasn't been sent yet for this chat's current mode (e.g., on first activation or after a mode change while inactive).
-    * To deactivate, send `{ "chat_id": null }`.
-4.  **Get Active Chat (Optional):** `GET /v1/chats/active`
-    * Returns `{ "active_chat_id": "current-active-id" }` or `{ "active_chat_id": null }`.
-5.  **Change Chat Mode:** `PUT /v1/chats/{chat_id}/mode`
-    * Body: `{ "mode": "NewModeName" }` (e.g., "Code", "Ask").
-    * Updates the mode for the specified chat.
-    * **Important:** If the specified `chat_id` is the *currently active* chat, this endpoint immediately sends the system prompt for the *new* mode to the Gemini session. If the chat is inactive, the prompt is sent the next time it's activated via `POST /v1/chats/active`.
-6.  **Send Message / Get Completion:** `POST /v1/chat/completions`
-    * Uses the currently **active** chat session (set via step 3).
-    * Body: Standard OpenAI format `{ "messages": [{"role": "user", "content": "Your message" or [{"type":"text",...},{"type":"image_url",...}] }], ... }`.
-    * Sends *only* the user message content to the active Gemini session.
-    * Returns an OpenAI-compatible `ChatCompletionResponse`.
-7.  **Delete a Chat:** `DELETE /v1/chats/{chat_id}`
-    * Permanently deletes the specified chat session.
+# Run the TUI client
+python tui_client.py
 
-**Roo Code Configuration:**
-* Point Roo Code to use the API Base URL: `http://<server-ip>:<port>/v1` (e.g., `http://localhost:8022/v1`).
-* Ensure that Roo is **NOT** configured to use streaming responses.
+# Connect to custom API endpoint
+python tui_client.py http://your-api-host:8000
+```
 
-## Web UI
+### TUI Features
+- 📋 Chat session management
+- 💬 Real-time messaging with Gemini
+- 🎨 Rich text display with timestamps
+- ⚡ Async operations for smooth performance
 
-A simple web interface is available at the root URL (`http://<server-ip>:<port>/`) for basic chat management:
-* View existing chats.
-* Create new chats with descriptions and modes.
-* Delete chats.
-* Set the active chat.
-* Change the mode (prompt) of existing chats.
+## 💻 CLI Client
 
-## Image Handling
+The project includes a powerful Command Line Interface client for automation and scripting:
 
-- The server expects images encoded as Base64 within `data:` URIs, following the OpenAI vision format.
-- It decodes these images and saves them to temporary files on the server filesystem for processing by `gemini-webapi`.
-- These temporary files are automatically deleted after the API call completes. Ensure the server process has permissions to write to the system's temporary directory.
-- Direct `http`/`https` image URLs sent by the client are currently _ignored_.
+```bash
+# Quick installation
+cd cli
+./install.sh
 
-## Error Handling
+# Basic usage
+./cli/gemini-cli.sh --help
+./cli/gemini-cli.sh health
+./cli/gemini-cli.sh chats
+./cli/gemini-cli.sh send "Hello, how are you?"
+./cli/gemini-cli.sh chat
+```
 
-- Check the console output of the FastAPI server for errors during initialization, request handling, or interactions with the Gemini API or database.
-- Common HTTP status codes include 404 (Not Found), 422 (Validation Error), 500 (Internal Server Error), 503 (Service Unavailable - e.g., DB/Gemini client init failure).
+### CLI Features
+- 🚀 **Full API Coverage**: All API endpoints supported
+- 🎨 **Colored Output**: Beautiful, readable terminal output
+- 🔧 **Interactive Mode**: Chat directly from the command line
+- 📝 **JSON Handling**: Automatic JSON parsing and formatting
+- 🐛 **Debug Mode**: Detailed logging for troubleshooting
+- 🔗 **Flexible Configuration**: Environment variables and command-line options
 
-This is a PERSONAL project for study purposes only. USE AT YOUR OWN RISK.
+### CLI Commands
+- `health` - Check API health
+- `chats` - List all chat sessions
+- `active` - Show active chat session
+- `create [DESC] [MODE]` - Create new chat session
+- `set-active <CHAT_ID>` - Set active chat session
+- `delete <CHAT_ID>` - Delete chat session
+- `send <MESSAGE> [CHAT_ID]` - Send message to chat
+- `chat [CHAT_ID]` - Start interactive chat mode
+
+### CLI Examples
+```bash
+# Create and use a chat session
+CHAT_ID=$(./cli/gemini-cli.sh create "Project brainstorming" "Creative")
+./cli/gemini-cli.sh send "Help me plan a new project" "$CHAT_ID"
+
+# Interactive chat mode
+./cli/gemini-cli.sh chat
+
+# Connect to remote API
+./cli/gemini-cli.sh --api-url http://my-server:8000 health
+```
+
+For detailed CLI documentation, see [cli/README.md](cli/README.md).
+
+## 🌐 Web Interface
+
+Access the web interface at `http://localhost:8000` after starting the API server.
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+GOOGLE_API_KEY=your_gemini_api_key_here
+DATABASE_URL=sqlite:///./gemini_chats.db
+```
+
+### API Endpoints
+
+- `GET /v1/chats` - List all chat sessions
+- `POST /v1/chats` - Create new chat session
+- `POST /v1/chats/active` - Set active chat
+- `GET /v1/chats/active` - Get active chat
+- `DELETE /v1/chats/{chat_id}` - Delete chat session
+- `POST /v1/chat/completions` - Send message to Gemini
+
+## 🐳 Docker Support
+
+### Using Makefile
+
+```bash
+# Start services
+make up
+
+# Start with TUI
+make up profile=tui
+
+# View logs
+make logs
+
+# Stop services
+make down
+
+# Rebuild and restart
+make re
+```
+
+### Using Docker Compose Directly
+
+```bash
+# Start API only
+docker-compose up gemini-api
+
+# Start both services
+docker-compose --profile tui up
+
+# Build images
+docker-compose build
+
+# View logs
+docker-compose logs
+```
+
+### Docker Services
+
+- **gemini-api**: Main API service (port 8000)
+- **gemini-tui**: TUI client (interactive terminal)
+
+## 📚 API Documentation
+
+Once the server is running, visit:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## 🛠️ Development
+
+### Running Tests
+
+```bash
+# From the api directory
+cd api
+python -m pytest
+```
+
+### Code Formatting
+
+```bash
+# Format code with black
+black api/app/
+
+# Sort imports with isort
+isort api/app/
+```
+
+## 📦 Dependencies
+
+### API Dependencies
+- FastAPI - Modern web framework
+- Uvicorn - ASGI server
+- aiosqlite - Async SQLite support
+- google-generativeai - Gemini API client
+- Pydantic - Data validation
+
+### TUI Dependencies
+- Textual - Modern TUI framework
+- httpx - Async HTTP client
+- Rich - Rich text formatting
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the documentation
+2. Search existing issues
+3. Create a new issue with detailed information
