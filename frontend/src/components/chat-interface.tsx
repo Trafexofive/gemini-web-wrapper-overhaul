@@ -1,53 +1,51 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User } from 'lucide-react'
+import { useChatStore } from '@/store/chat-store'
+import { MessageContent } from './message-content'
+import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { useChatStore } from '@/store/chat-store'
-import { Message } from '@/types'
-import { MessageContent } from './message-content'
+import { useState, useRef, useEffect } from 'react'
+import toast from 'react-hot-toast'
 
 export function ChatInterface() {
-  const [input, setInput] = useState('')
+  const { 
+    activeChatId, 
+    getChatMessages, 
+    sendMessage, 
+    isSending,
+    getActiveChat 
+  } = useChatStore()
+  
+  const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  
-  const {
-    activeChatId,
-    isSending,
-    sendMessage,
-    getActiveChat,
-    getChatMessages,
-  } = useChatStore()
 
   const activeChat = getActiveChat()
   const messages = activeChatId ? getChatMessages(activeChatId) : []
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }
 
-  // Auto-resize textarea
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-    }
-  }, [input])
+    scrollToBottom()
+  }, [messages])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isSending || !activeChatId) return
-
-    const message = input.trim()
-    setInput('')
+    
+    if (!inputValue.trim() || isSending) return
+    
+    const message = inputValue.trim()
+    setInputValue('')
     setIsTyping(true)
     
     try {
       await sendMessage(message)
+    } catch (error) {
+      toast.error('Failed to send message')
     } finally {
       setIsTyping(false)
     }
@@ -62,12 +60,14 @@ export function ChatInterface() {
 
   if (!activeChatId) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <div className="text-center">
-          <Bot className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Active Chat</h3>
-          <p className="text-muted-foreground">
-            Select a chat from the sidebar or create a new one to start chatting.
+          <div className="w-24 h-24 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Sparkles className="w-12 h-12 text-purple-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-3">No Active Chat</h3>
+          <p className="text-slate-400 max-w-md">
+            Select a chat from the sidebar or create a new one to start chatting with Gemini AI.
           </p>
         </div>
       </div>
@@ -75,46 +75,82 @@ export function ChatInterface() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Chat Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center justify-between p-4">
+      <div className="p-6 border-b border-white/20 bg-white/5 backdrop-blur-sm">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+            <Bot className="w-5 h-5 text-white" />
+          </div>
           <div>
-            <h2 className="text-lg font-semibold">
+            <h2 className="text-lg font-semibold text-white">
               {activeChat?.description || 'Untitled Chat'}
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Mode: {activeChat?.mode || 'Default'}
+            <p className="text-sm text-slate-400">
+              {activeChat?.mode || 'Default'} mode
             </p>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.length === 0 ? (
-          <div className="text-center text-muted-foreground mt-8">
-            <Bot className="mx-auto h-8 w-8 mb-2" />
-            <p>Start a conversation with Gemini</p>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <MessageSquare className="w-8 h-8 text-purple-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Start a conversation</h3>
+            <p className="text-slate-400">
+              Send a message to begin chatting with Gemini AI
+            </p>
           </div>
         ) : (
           messages.map((message, index) => (
-            <MessageBubble key={index} message={message} />
+            <div
+              key={index}
+              className={`flex items-start space-x-4 ${
+                message.role === 'user' ? 'justify-end' : 'justify-start'
+              }`}
+            >
+              {message.role === 'assistant' && (
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+              )}
+              
+              <div
+                className={`max-w-3xl rounded-2xl px-4 py-3 ${
+                  message.role === 'user'
+                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                    : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white'
+                }`}
+              >
+                <MessageContent content={message.content} />
+              </div>
+              
+              {message.role === 'user' && (
+                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-white" />
+                </div>
+              )}
+            </div>
           ))
         )}
         
         {isTyping && (
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                <Bot className="h-4 w-4 text-primary-foreground" />
-              </div>
+          <div className="flex items-start space-x-4">
+            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+              <Bot className="w-4 h-4 text-white" />
             </div>
-            <div className="flex-1 bg-muted rounded-lg p-3">
-              <div className="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-3">
+              <div className="flex items-center space-x-2">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <span className="text-slate-400 text-sm">Gemini is typing...</span>
               </div>
             </div>
           </div>
@@ -123,64 +159,33 @@ export function ChatInterface() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <form onSubmit={handleSubmit} className="p-4">
-          <div className="flex space-x-2">
+      {/* Input */}
+      <div className="p-6 border-t border-white/20 bg-white/5 backdrop-blur-sm">
+        <form onSubmit={handleSubmit} className="flex space-x-4">
+          <div className="flex-1 relative">
             <Textarea
               ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
-              className="min-h-[60px] max-h-[200px] resize-none"
+              className="min-h-[60px] max-h-32 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500 focus:ring-purple-500 resize-none"
               disabled={isSending}
             />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!input.trim() || isSending}
-              className="flex-shrink-0"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
           </div>
+          <Button
+            type="submit"
+            disabled={!inputValue.trim() || isSending}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSending ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
         </form>
       </div>
-    </div>
-  )
-}
-
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === 'user'
-  
-  return (
-    <div className={`flex items-start space-x-3 ${isUser ? 'justify-end' : ''}`}>
-      {!isUser && (
-        <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <Bot className="h-4 w-4 text-primary-foreground" />
-          </div>
-        </div>
-      )}
-      
-      <div
-        className={`flex-1 max-w-[80%] rounded-lg p-3 ${
-          isUser
-            ? 'bg-primary text-primary-foreground ml-auto'
-            : 'bg-muted'
-        }`}
-      >
-        <MessageContent content={message.content} />
-      </div>
-      
-      {isUser && (
-        <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-            <User className="h-4 w-4 text-muted-foreground" />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
