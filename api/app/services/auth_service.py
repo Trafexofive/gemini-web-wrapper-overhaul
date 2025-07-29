@@ -46,6 +46,7 @@ class AuthService:
                     is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_used TIMESTAMP,
+                    key_plain TEXT,
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             """)
@@ -178,13 +179,17 @@ class AuthService:
             api_key = f"gemini_{secrets.token_urlsafe(32)}"
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()
             key_id = secrets.token_urlsafe(16)
+            print(f"DEBUG: Creating API key: {api_key}")
+            print(f"DEBUG: key_id: {key_id}")
+            print(f"DEBUG: key_plain: {api_key}")
             
             await db.execute("""
-                INSERT INTO api_keys (id, user_id, name, key_hash)
-                VALUES (?, ?, ?, ?)
-            """, (key_id, user_id, key_data.name, key_hash))
+                INSERT INTO api_keys (id, user_id, name, key_hash, key_plain)
+                VALUES (?, ?, ?, ?, ?)
+            """, (key_id, user_id, key_data.name, key_hash, api_key))
             
             await db.commit()
+            print(f"DEBUG: Inserted API key row for {key_id}")
             
             return APIKeyResponse(
                 id=key_id,
@@ -196,28 +201,27 @@ class AuthService:
             )
     
     async def get_user_api_keys(self, user_id: str) -> List[APIKeyResponse]:
-        """Get all API keys for a user."""
+        """Get all API keys for a user (self-use: return real key value)."""
         async with aiosqlite.connect(DATABASE_URL) as db:
             cursor = await db.execute("""
-                SELECT id, name, is_active, created_at, last_used
+                SELECT id, name, is_active, created_at, last_used, key_plain
                 FROM api_keys 
                 WHERE user_id = ?
                 ORDER BY created_at DESC
             """, (user_id,))
-            
             rows = await cursor.fetchall()
-            
-            return [
-                APIKeyResponse(
+            keys = []
+            for row in rows:
+                key_value = row[5] if row[5] else "(not available: created before migration)"
+                keys.append(APIKeyResponse(
                     id=row[0],
                     name=row[1],
-                    key="***",  # Don't show the actual key
+                    key=key_value,
                     is_active=bool(row[2]),
                     created_at=datetime.fromisoformat(row[3]),
                     last_used=datetime.fromisoformat(row[4]) if row[4] else None
-                )
-                for row in rows
-            ]
+                ))
+            return keys
     
     async def verify_api_key(self, api_key: str) -> Optional[str]:
         """Verify an API key and return the user ID."""

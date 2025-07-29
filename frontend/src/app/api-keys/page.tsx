@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store/auth-store'
+import { AuthGuard } from '@/components/auth-guard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Plus, Trash2, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
@@ -28,6 +29,8 @@ export default function APIKeysPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
+  const [newlyCreatedKey, setNewlyCreatedKey] = useState<{ id: string; key: string; name: string } | null>(null)
 
   useEffect(() => {
     loadAPIKeys()
@@ -79,7 +82,15 @@ export default function APIKeysPage() {
       const newKey = await response.json()
       setApiKeys(prev => [newKey, ...prev])
       setNewKeyName('')
-      toast.success('API key created successfully!')
+      
+      // Store the newly created key for display
+      setNewlyCreatedKey({
+        id: newKey.id,
+        key: newKey.key,
+        name: newKey.name
+      })
+      
+      toast.success('API key created successfully! Copy it now - it won\'t be shown again!')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create API key'
       toast.error(errorMessage)
@@ -122,6 +133,13 @@ export default function APIKeysPage() {
     }
   }
 
+  const toggleKeyVisibility = (keyId: string) => {
+    setShowKeys(prev => ({
+      ...prev,
+      [keyId]: !prev[keyId]
+    }))
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -133,98 +151,170 @@ export default function APIKeysPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="bg-white/10 backdrop-blur-xl border-b border-white/20">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center space-x-4">
-            <Button
-              onClick={() => router.push('/')}
-              variant="ghost"
-              size="sm"
-              className="text-slate-400 hover:text-white hover:bg-white/10"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
-            <h1 className="text-xl font-bold text-white">API Keys</h1>
-          </div>
-          
-          <div className="text-right">
-            <p className="text-sm font-medium text-white">{user?.username}</p>
+    <AuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="bg-white/10 backdrop-blur-xl border-b border-white/20">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center space-x-4">
+              <Button
+                onClick={() => router.push('/')}
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-white hover:bg-white/10"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <h1 className="text-xl font-bold text-white">API Keys</h1>
+            </div>
+            
+            <div className="text-right">
+              <p className="text-sm font-medium text-white">{user?.username}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <Card className="bg-white/10 backdrop-blur-xl border-white/20">
-            <CardHeader>
-              <CardTitle className="text-white">Create New API Key</CardTitle>
-              <CardDescription className="text-slate-300">
-                Create a new API key to access the Gemini API programmatically
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex space-x-4">
-                <Input
-                  placeholder="Enter API key name"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-slate-400"
-                />
-                <Button
-                  onClick={createAPIKey}
-                  disabled={!newKeyName.trim() || isCreating}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-                >
-                  {isCreating ? 'Creating...' : 'Create'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/10 backdrop-blur-xl border-white/20">
-            <CardHeader>
-              <CardTitle className="text-white">Your API Keys</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-400">Loading...</p>
-                </div>
-              ) : apiKeys.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-400">No API keys found.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {apiKeys.map((key) => (
-                    <div
-                      key={key.id}
-                      className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
-                    >
-                      <div className="flex-1">
-                        <h3 className="font-medium text-white">{key.name}</h3>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Created: {formatDate(key.created_at)}
-                        </p>
+        <div className="container mx-auto px-6 py-8">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {/* Newly Created Key Display */}
+            {newlyCreatedKey && (
+              <Card className="bg-green-500/10 backdrop-blur-xl border-green-500/20">
+                <CardHeader>
+                  <CardTitle className="text-green-400">New API Key Created!</CardTitle>
+                  <CardDescription className="text-green-300">
+                    Copy this key now - it won't be shown again!
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-green-300 mb-2">Name: {newlyCreatedKey.name}</p>
+                      <div className="flex items-center space-x-2">
+                        <code className="flex-1 bg-black/20 p-3 rounded text-green-400 text-sm font-mono break-all">
+                          {newlyCreatedKey.key}
+                        </code>
+                        <Button
+                          onClick={() => copyToClipboard(newlyCreatedKey.key)}
+                          size="sm"
+                          className="bg-green-500 hover:bg-green-600"
+                        >
+                          {copiedKey === newlyCreatedKey.key ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </Button>
                       </div>
-                      <Button
-                        onClick={() => deleteAPIKey(key.id)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
                     </div>
-                  ))}
+                    <Button
+                      onClick={() => setNewlyCreatedKey(null)}
+                      variant="outline"
+                      className="border-green-500/20 text-green-400 hover:bg-green-500/10"
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="bg-white/10 backdrop-blur-xl border-white/20">
+              <CardHeader>
+                <CardTitle className="text-white">Create New API Key</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Create a new API key to access the Gemini API programmatically
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex space-x-4">
+                  <Input
+                    placeholder="Enter API key name"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-slate-400"
+                  />
+                  <Button
+                    onClick={createAPIKey}
+                    disabled={!newKeyName.trim() || isCreating}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                  >
+                    {isCreating ? 'Creating...' : 'Create'}
+                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/10 backdrop-blur-xl border-white/20">
+              <CardHeader>
+                <CardTitle className="text-white">Your API Keys</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Click the eye icon to reveal and copy your API keys
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400">Loading...</p>
+                  </div>
+                ) : apiKeys.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400">No API keys found.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {apiKeys.map((key) => (
+                      <div
+                        key={key.id}
+                        className="p-4 bg-white/5 rounded-lg border border-white/10"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="font-medium text-white">{key.name}</h3>
+                            <p className="text-xs text-slate-400">
+                              Created: {formatDate(key.created_at)}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              onClick={() => toggleKeyVisibility(key.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-slate-400 hover:text-white"
+                            >
+                              {showKeys[key.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </Button>
+                            {showKeys[key.id] && (
+                              <Button
+                                onClick={() => copyToClipboard(key.key)}
+                                variant="ghost"
+                                size="sm"
+                                className="text-green-400 hover:text-green-300"
+                              >
+                                {copiedKey === key.key ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => deleteAPIKey(key.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        {showKeys[key.id] && (
+                          <div className="mt-3">
+                            <code className="block w-full bg-black/20 p-3 rounded text-green-400 text-sm font-mono break-all">
+                              {key.key}
+                            </code>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
+    </AuthGuard>
   )
 }

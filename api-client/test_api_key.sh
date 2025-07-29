@@ -4,7 +4,7 @@
 # This shows how you can use the API key from anywhere in the world
 
 # Your API key (get this from the frontend)
-API_KEY="gemini_pzhfxd1AQbH0sec_7sgrt2RAgUA3_Kx_hLbCKcOEMxU"
+API_KEY="gemini_d1r3ALtymK_8cheeCnMM5hWFCYPbOtjnvyVM_5EiDnQ"
 
 # API base URL (change this to your server's URL)
 API_BASE_URL="http://localhost:8000"
