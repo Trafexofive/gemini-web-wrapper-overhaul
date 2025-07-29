@@ -9,19 +9,23 @@ import { useAuthStore } from '@/store/auth-store'
 import { LogOut, User, Key } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { FullScreenLoading } from '@/components/loading-spinner'
 
 export default function Home() {
   const { loadChats } = useChatStore()
-  const { user, logout, checkAuth } = useAuthStore()
+  const { user, logout, checkAuth, isInitialized } = useAuthStore()
 
   useEffect(() => {
-    // Check authentication status on mount
-    checkAuth().then((isAuthenticated) => {
-      if (isAuthenticated) {
-        loadChats()
-      }
-    })
-  }, [checkAuth, loadChats])
+    // Only load chats if auth is initialized and user is authenticated
+    if (isInitialized && user) {
+      loadChats()
+    }
+  }, [isInitialized, user, loadChats])
+
+  // Show loading while auth is being initialized
+  if (!isInitialized) {
+    return <FullScreenLoading text="Initializing..." />
+  }
 
   return (
     <AuthGuard>

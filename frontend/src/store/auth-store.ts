@@ -16,6 +16,7 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  isInitialized: boolean
   
   // Actions
   login: (email: string, password: string) => Promise<boolean>
@@ -25,6 +26,7 @@ interface AuthState {
   setToken: (token: string) => void
   clearAuth: () => void
   checkAuth: () => Promise<boolean>
+  initialize: () => Promise<void>
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/v1'
@@ -36,6 +38,47 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      isInitialized: false,
+
+      initialize: async () => {
+        const { token } = get()
+        if (!token) {
+          set({ isInitialized: true })
+          return
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+
+          if (response.ok) {
+            const user = await response.json()
+            set({ 
+              user, 
+              isAuthenticated: true, 
+              isInitialized: true 
+            })
+          } else {
+            set({ 
+              user: null, 
+              token: null, 
+              isAuthenticated: false, 
+              isInitialized: true 
+            })
+          }
+        } catch (error) {
+          console.error('Auth initialization failed:', error)
+          set({ 
+            user: null, 
+            token: null, 
+            isAuthenticated: false, 
+            isInitialized: true 
+          })
+        }
+      },
 
       login: async (email: string, password: string) => {
         set({ isLoading: true })
@@ -132,7 +175,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
-        const { token } = get()
+        const { token, isInitialized } = get()
+        
+        if (!isInitialized) {
+          await get().initialize()
+        }
+        
         if (!token) {
           return false
         }

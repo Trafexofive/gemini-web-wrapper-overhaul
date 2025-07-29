@@ -1,32 +1,52 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth-store'
+import { FullScreenLoading } from './loading-spinner'
 
 interface AuthGuardProps {
   children: React.ReactNode
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, isLoading, isInitialized, checkAuth } = useAuthStore()
   const router = useRouter()
+  const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const verifyAuth = async () => {
+      try {
+        await checkAuth()
+      } catch (error) {
+        console.error('Auth check failed:', error)
+      } finally {
+        setIsChecking(false)
+      }
+    }
+
+    // Only check auth if not already initialized
+    if (!isInitialized) {
+      verifyAuth()
+    } else {
+      setIsChecking(false)
+    }
+  }, [checkAuth, isInitialized])
+
+  useEffect(() => {
+    if (!isChecking && !isAuthenticated && isInitialized) {
       router.push('/login')
     }
-  }, [isAuthenticated, router])
+  }, [isChecking, isAuthenticated, isInitialized, router])
 
+  // Show loading while checking auth or if auth is being initialized
+  if (isChecking || isLoading || !isInitialized) {
+    return <FullScreenLoading text={!isInitialized ? 'Initializing...' : 'Loading...'} />
+  }
+
+  // Show loading if not authenticated (will redirect)
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
-    )
+    return <FullScreenLoading text="Redirecting to login..." />
   }
 
   return <>{children}</>
