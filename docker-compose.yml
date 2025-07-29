@@ -1,19 +1,18 @@
+version: '3.8'
 
 services:
   gemini-api:
     build:
       context: ./api
       dockerfile: Dockerfile
-    image: gemini-web-wrapper-api
     ports:
       - "8000:8000"
     volumes:
-      - "browser_user:/root/.mozilla/firefox"
-      - "./static:/app/static"
+      - ./data:/app/data
+      - ~/.mozilla:/root/.mozilla:ro  # Mount Firefox profile for cookie extraction
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-    stdin_open: true
-    tty: true
+    restart: unless-stopped
     networks:
       - gemini-network
 
@@ -21,13 +20,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: gemini-web-wrapper-frontend
     ports:
       - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://gemini-api:8000/v1
     depends_on:
       - gemini-api
-    environment:
-      - NODE_ENV=production
+    restart: unless-stopped
     networks:
       - gemini-network
 
@@ -35,27 +34,20 @@ services:
     build:
       context: ./tui
       dockerfile: Dockerfile
-    image: gemini-web-wrapper-tui
+    volumes:
+      - ~/.mozilla:/root/.mozilla:ro  # Mount Firefox profile for cookie extraction
+    environment:
+      - API_URL=http://gemini-api:8000
     depends_on:
       - gemini-api
-    environment:
-      - API_BASE_URL=http://gemini-api:8000
-    stdin_open: true
-    tty: true
+    restart: unless-stopped
     networks:
       - gemini-network
-    profiles:
-      - tui
-
-volumes:
-  browser_user:
-    driver: local
-    driver_opts:
-      type: none
-      device: ~/.mozilla/firefox
-      o: bind
 
 networks:
   gemini-network:
     driver: bridge
+
+volumes:
+  data:
 

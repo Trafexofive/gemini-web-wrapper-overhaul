@@ -240,7 +240,7 @@ class GeminiTUIApp(App):
     async def load_chats(self) -> None:
         """Load chat sessions from the API"""
         try:
-            response = await self.http_client.get(f"{self.api_base}/v1/chats")
+            response = await self.http_client.get(f"{self.api_base}/v1/chats/")
             response.raise_for_status()
             
             chats_data = response.json()
@@ -294,7 +294,7 @@ class GeminiTUIApp(App):
             }
             
             response = await self.http_client.post(
-                f"{self.api_base}/v1/chats",
+                f"{self.api_base}/v1/chats/",
                 json=payload
             )
             response.raise_for_status()

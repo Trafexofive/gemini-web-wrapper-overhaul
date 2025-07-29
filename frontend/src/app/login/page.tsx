@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    name: ''
+    username: ''
   })
   
   const { login, register, isLoading } = useAuthStore()
@@ -29,7 +29,7 @@ export default function LoginPage() {
         router.push('/')
       }
     } else {
-      const success = await register(formData.email, formData.password, formData.name)
+      const success = await register(formData.email, formData.password, formData.username)
       if (success) {
         router.push('/')
       }
@@ -59,60 +59,66 @@ export default function LoginPage() {
         {/* Auth Card */}
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-8 border border-white/20 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {!isLogin && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500 focus:ring-purple-500"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-            )}
-
+            {/* Email Field */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">
-                Email Address
+              <label htmlFor="email" className="text-sm font-medium text-slate-300">
+                Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
+                  id="email"
                   type="email"
                   placeholder="Enter your email"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500 focus:ring-purple-500"
+                  className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500"
                   required
                 />
               </div>
             </div>
 
+            {/* Username Field (only for register) */}
+            {!isLogin && (
+              <div className="space-y-2">
+                <label htmlFor="username" className="text-sm font-medium text-slate-300">
+                  Username
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Choose a username"
+                    value={formData.username}
+                    onChange={(e) => handleInputChange('username', e.target.value)}
+                    className="pl-10 bg-white/5 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Password Field */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">
+              <label htmlFor="password" className="text-sm font-medium text-slate-300">
                 Password
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500 focus:ring-purple-500"
+                  className="pl-10 pr-10 bg-white/5 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -153,6 +159,7 @@ export default function LoginPage() {
             <p className="text-xs text-slate-400 mb-2">Demo credentials:</p>
             <p className="text-xs text-slate-300">Email: demo@example.com</p>
             <p className="text-xs text-slate-300">Password: password123</p>
+            <p className="text-xs text-slate-300">Username: demo</p>
           </div>
         </div>
 

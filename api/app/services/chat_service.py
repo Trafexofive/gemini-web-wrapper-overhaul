@@ -27,8 +27,9 @@ except ImportError:
 
 
 from app.repositories.chat_repository import SqliteChatRepository
+from app.repositories.message_repository import SqliteMessageRepository
 from app.core.gemini_client import GeminiClientWrapper
-from app.models import ChatInfo, OpenAIMessage, TextBlock, ImageUrlBlock, ChatCompletionResponse, Choice, Usage
+from app.models import ChatInfo, OpenAIMessage, TextBlock, ImageUrlBlock, ChatCompletionResponse, Choice, Usage, MessageCreate
 from app.config import ALLOWED_MODES, GEMINI_MODEL_NAME
 
 # Mapping from mode names to the actual prompt variables/text
@@ -49,6 +50,7 @@ class ChatService:
 
     def __init__(self, repository: SqliteChatRepository, gemini_wrapper: GeminiClientWrapper):
         self.repository = repository
+        self.message_repository = SqliteMessageRepository()
         self.gemini_wrapper = gemini_wrapper
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._active_chat_id: Optional[str] = None
@@ -140,6 +142,14 @@ class ChatService:
                 updated_metadata = chat_session.metadata
                 print(f"Service: System prompt sent successfully for {chat_id}.")
 
+                # Store system message in database
+                system_message = MessageCreate(
+                    role="system",
+                    content=system_prompt,
+                    metadata={"type": "system_prompt", "mode": mode}
+                )
+                await self.message_repository.create_message(db, chat_id, system_message)
+
                 # Update DB: metadata and mark prompt as sent
                 print(f"Service: Updating DB for chat {chat_id} post-prompt send...")
                 meta_ok = await self.repository.update_metadata(db, chat_id, updated_metadata)
@@ -197,90 +207,77 @@ class ChatService:
         # 1. Update DB (mode and resets prompt_sent flag) via repository
         success_db = await self.repository.update_mode_and_reset_flag(db, chat_id, new_mode)
         if not success_db:
-            print(f"Service Error: DB update failed for mode change on chat {chat_id}.")
-            raise HTTPException(status_code=500, detail=f"Failed to update chat mode in database for {chat_id}.")
+             print(f"Service ERROR: Failed to update mode in DB for chat {chat_id}.")
+             raise HTTPException(status_code=500, detail="Failed to update chat mode in database.")
 
-        # 2. Update cache (mode and prompt_sent flag)
+        # 2. Update cache
         self._cache[chat_id]["mode"] = new_mode
-        self._cache[chat_id]["prompt_sent"] = False # Reset flag first in cache
-        print(f"Service: Cache updated for chat {chat_id}: Mode='{new_mode}', prompt_sent=False (reset)")
+        self._cache[chat_id]["prompt_sent"] = False
+        print(f"Service: Mode updated to '{new_mode}' for chat {chat_id} in cache.")
 
-        # 3. Send new system prompt IF this is the active chat
-        if chat_id == self._active_chat_id:
-            print(f"Service: Chat {chat_id} is active. Sending system prompt for new mode '{new_mode}'...")
-            new_system_prompt = MODE_PROMPT_TEXTS.get(new_mode)
+        # 3. If this is the active chat, send new system prompt immediately
+        if self._active_chat_id == chat_id:
+             print(f"Service: Active chat {chat_id} mode changed to '{new_mode}'. Sending new system prompt...")
+             new_system_prompt = MODE_PROMPT_TEXTS.get(new_mode)
+             if new_system_prompt:
+                  try:
+                       # Load current session
+                       metadata = self._cache[chat_id]["metadata"]
+                       chat_session = self.gemini_wrapper.load_chat_from_metadata(metadata=metadata)
+                       
+                       # Send new system prompt
+                       await self.gemini_wrapper.send_message(chat_session, new_system_prompt)
+                       updated_metadata = chat_session.metadata
+                       print(f"Service: New system prompt sent successfully for {chat_id}.")
 
-            if new_system_prompt:
-                prompt_send_error = False
-                try:
-                    metadata = self._cache[chat_id].get("metadata")
-                    if not metadata:
-                         # This should ideally not happen if cache is consistent
-                         print(f"Service CRITICAL ERROR: Metadata missing for active chat {chat_id} during mode change prompt send!")
-                         raise Exception("Cannot send prompt, metadata missing in cache.")
+                       # Store new system message in database
+                       system_message = MessageCreate(
+                           role="system",
+                           content=new_system_prompt,
+                           metadata={"type": "system_prompt", "mode": new_mode}
+                       )
+                       await self.message_repository.create_message(db, chat_id, system_message)
 
-                    # Load session, send prompt, get updated metadata
-                    chat_session = self.gemini_wrapper.load_chat_from_metadata(metadata=metadata)
-                    await self.gemini_wrapper.send_message(chat_session, new_system_prompt)
-                    updated_metadata = chat_session.metadata
-                    print(f"Service: System prompt for new mode '{new_mode}' sent successfully for active chat {chat_id}.")
+                       # Update DB and cache
+                       meta_ok = await self.repository.update_metadata(db, chat_id, updated_metadata)
+                       flag_ok = await self.repository.mark_prompt_sent(db, chat_id)
 
-                    # Update DB: metadata and mark prompt as sent (for the NEW mode)
-                    print(f"Service: Updating DB state for chat {chat_id} after immediate prompt send...")
-                    meta_ok = await self.repository.update_metadata(db, chat_id, updated_metadata)
-                    # Use mark_prompt_sent to set the flag to TRUE now
-                    flag_ok = await self.repository.mark_prompt_sent(db, chat_id)
+                       if meta_ok and flag_ok:
+                            self._cache[chat_id]["metadata"] = updated_metadata
+                            self._cache[chat_id]["prompt_sent"] = True
+                            print(f"Service: Mode change and system prompt completed for active chat {chat_id}.")
+                       else:
+                            print(f"Service ERROR: Failed to update metadata/prompt flag after mode change for {chat_id}.")
 
-                    # Update cache based on DB success
-                    if meta_ok:
-                         self._cache[chat_id]["metadata"] = updated_metadata
-                         print("Service: Metadata cache updated.")
-                    else:
-                         prompt_send_error = True
-                         print(f"Service ERROR: Failed to update metadata post-mode-change prompt send for {chat_id}.")
-
-                    if flag_ok:
-                         self._cache[chat_id]["prompt_sent"] = True # Mark as sent in cache
-                         print("Service: prompt_sent flag cache updated to True.")
-                    else:
-                         prompt_send_error = True
-                         # If flag update failed, cache remains False (conservative)
-                         print(f"Service ERROR: Failed to mark prompt sent flag post-mode-change prompt send for {chat_id}. Cache flag remains False.")
-
-                    if not prompt_send_error:
-                        print(f"Service: DB and cache updated successfully after mode change prompt send for {chat_id}.")
-
-                except Exception as send_error:
-                    print(f"Service ERROR sending system prompt during mode change for active chat {chat_id}: {send_error}")
-                    traceback.print_exc()
-                    prompt_send_error = True
-                    # Log the error, but don't raise HTTPException to keep API responsive
-                finally:
-                     if prompt_send_error:
-                         print(f"Service WARNING: Failed to fully send/update state for system prompt after mode change on active chat {chat_id}.")
-            else:
-                 # Case where the new mode is "Default" or has no prompt
-                 print(f"Service: New mode '{new_mode}' has no system prompt. Nothing to send for active chat {chat_id}. Prompt flag remains reset (False).")
-        else:
-             # Case where the updated chat was not the active one
-            print(f"Service: Chat {chat_id} (updated to mode '{new_mode}') is not the active chat. Prompt will be sent upon its next activation.")
-
+                  except Exception as mode_e:
+                       print(f"Service ERROR sending new system prompt after mode change for {chat_id}: {mode_e}")
+                       traceback.print_exc()
+                       # Don't raise here, mode was updated successfully, just prompt sending failed
+             else:
+                  print(f"Service Warning: No system prompt found for mode '{new_mode}'. Skipping prompt send.")
 
     async def delete_chat(self, db: aiosqlite.Connection, chat_id: str):
-        """Deletes a chat session from DB and cache."""
-        print(f"Service: Attempting to delete chat {chat_id}")
-        if chat_id not in self._cache:
-             print(f"Service Warning: Chat {chat_id} not found in cache during deletion request.")
-             raise HTTPException(status_code=404, detail="Chat session not found.")
-        success_db = await self.repository.delete_chat(db, chat_id)
-        if not success_db:
-             print(f"Service Error: DB deletion failed for chat {chat_id} (it was present in cache).")
-             raise HTTPException(status_code=500, detail=f"Failed to delete chat session from database for {chat_id}.")
-        del self._cache[chat_id]
-        print(f"Service: Chat {chat_id} removed from cache.")
-        if self._active_chat_id == chat_id:
-            self._active_chat_id = None
-            print(f"Service: Deactivated chat {chat_id} because it was deleted.")
+        """Deletes a chat session and removes it from cache."""
+        try:
+            # Delete messages first (due to foreign key constraint)
+            await self.message_repository.delete_messages_by_chat_id(db, chat_id)
+            
+            # Delete chat session
+            success = await self.repository.delete_chat(db, chat_id)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Chat session not found: {chat_id}")
+            
+            # Remove from cache
+            if chat_id in self._cache:
+                del self._cache[chat_id]
+                print(f"Service: Chat {chat_id} removed from cache.")
+            if self._active_chat_id == chat_id:
+                self._active_chat_id = None
+                print(f"Service: Deactivated chat {chat_id} because it was deleted.")
+        except Exception as e:
+            print(f"Service Error deleting chat {chat_id}: {e}")
+            if isinstance(e, HTTPException): raise e
+            raise HTTPException(status_code=500, detail=f"Failed to delete chat session: {e}")
 
     # --- Method CORRECTED to REMOVE system prompt logic ---
     async def handle_completion(self, db: aiosqlite.Connection, user_messages: List[OpenAIMessage]) -> ChatCompletionResponse:
@@ -344,6 +341,18 @@ class ChatService:
         except Exception as proc_e:
              self._cleanup_temp_files(temp_file_paths); raise HTTPException(status_code=400, detail=f"Error processing user message content: {proc_e}")
 
+        # Store user message in database
+        try:
+            user_message = MessageCreate(
+                role="user",
+                content=user_message_text,
+                metadata={"has_images": len(temp_file_paths) > 0}
+            )
+            await self.message_repository.create_message(db, current_chat_id, user_message)
+            print(f"Service: User message stored in database for chat {current_chat_id}")
+        except Exception as store_e:
+            print(f"Service WARNING: Failed to store user message in database: {store_e}")
+
         mode_switch_match = re.search(r"\[switch_mode to '(.*?)' because:.*?\]", user_message_text, re.IGNORECASE | re.DOTALL)
 
         if mode_switch_match:
@@ -368,6 +377,18 @@ class ChatService:
             )
             response_text = getattr(api_response, 'text', "[No text in response]")
             print(f"Service: Response received from Gemini for chat {current_chat_id}.")
+
+            # Store assistant message in database
+            try:
+                assistant_message = MessageCreate(
+                    role="assistant",
+                    content=response_text,
+                    metadata={"response_length": len(response_text)}
+                )
+                await self.message_repository.create_message(db, current_chat_id, assistant_message)
+                print(f"Service: Assistant message stored in database for chat {current_chat_id}")
+            except Exception as store_e:
+                print(f"Service WARNING: Failed to store assistant message in database: {store_e}")
 
             # --- Update State Post-Gemini Call (Metadata ONLY) ---
             updated_metadata = chat_session.metadata

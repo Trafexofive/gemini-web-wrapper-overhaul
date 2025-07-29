@@ -6,16 +6,22 @@ import { Sidebar } from '@/components/sidebar'
 import { AuthGuard } from '@/components/auth-guard'
 import { useChatStore } from '@/store/chat-store'
 import { useAuthStore } from '@/store/auth-store'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, Key } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 export default function Home() {
   const { loadChats } = useChatStore()
-  const { user, logout } = useAuthStore()
+  const { user, logout, checkAuth } = useAuthStore()
 
   useEffect(() => {
-    loadChats()
-  }, [loadChats])
+    // Check authentication status on mount
+    checkAuth().then((isAuthenticated) => {
+      if (isAuthenticated) {
+        loadChats()
+      }
+    })
+  }, [checkAuth, loadChats])
 
   return (
     <AuthGuard>
@@ -36,10 +42,19 @@ export default function Home() {
                   <User className="w-4 h-4 text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-white">{user?.name}</p>
+                  <p className="text-sm font-medium text-white">{user?.username}</p>
                   <p className="text-xs text-slate-400">{user?.email}</p>
                 </div>
               </div>
+              <Link href="/api-keys">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-400 hover:text-white hover:bg-white/10"
+                >
+                  <Key className="w-4 h-4" />
+                </Button>
+              </Link>
               <Button
                 onClick={logout}
                 variant="ghost"

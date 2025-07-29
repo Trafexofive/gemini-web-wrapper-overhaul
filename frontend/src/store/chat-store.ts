@@ -105,7 +105,7 @@ export const useChatStore = create<ChatState>()(
       // Set active chat
       setActiveChat: async (chatId: string | null) => {
         try {
-          await api.setActiveChat({ chat_id: chatId })
+          await api.setActiveChat(chatId || '')
           set({ activeChatId: chatId })
           
           if (chatId) {
@@ -122,7 +122,7 @@ export const useChatStore = create<ChatState>()(
       // Update chat mode
       updateChatMode: async (chatId: string, mode: ChatMode) => {
         try {
-          await api.updateChatMode(chatId, { mode })
+          await api.updateChatMode(chatId, mode)
           
           // Update in state
           set(state => ({
@@ -162,7 +162,10 @@ export const useChatStore = create<ChatState>()(
           })
 
           // Add assistant response
-          const assistantMessage = response.choices[0].message
+          const assistantMessage: Message = {
+            role: response.choices[0].message.role as 'user' | 'assistant' | 'system',
+            content: response.choices[0].message.content,
+          }
           get().addMessage(activeChatId, assistantMessage)
           
         } catch (error) {
