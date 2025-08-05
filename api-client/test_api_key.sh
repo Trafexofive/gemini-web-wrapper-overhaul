@@ -4,7 +4,7 @@
 # This shows how you can use the API key from anywhere in the world
 
 # Your API key (get this from the frontend)
-API_KEY="gemini_d1r3ALtymK_8cheeCnMM5hWFCYPbOtjnvyVM_5EiDnQ"
+API_KEY="gemini_CpbW8-JaDEO-nkwwZp2vnlkcu397fqXGX8fOyyXeFxs"
 
 # API base URL (change this to your server's URL)
 API_BASE_URL="http://localhost:8000"
@@ -25,6 +25,13 @@ CHAT_RESPONSE=$(curl -s -X POST "$API_BASE_URL/v1/chats/" \
 
 CHAT_ID=$(echo "$CHAT_RESPONSE" | jq -r '.chat_id')
 echo "Created chat: $CHAT_ID"
+
+# Set the new chat as active
+echo -e "\n2.1. Setting active chat..."
+curl -s -X POST "$API_BASE_URL/v1/chats/active" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d "{\"chat_id\": \"$CHAT_ID\"}"
 
 # Test 3: Send a message
 echo -e "\n3. Sending a message..."

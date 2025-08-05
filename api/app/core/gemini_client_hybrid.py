@@ -305,7 +305,11 @@ class GeminiClientHybrid:
                 return self._sessions[session_id]
             
             # Create new session and store it
-            chat_session = self.start_new_chat(session_id)
+            if self._mode == "free":
+                chat_session = self._free_client.start_chat(metadata=metadata)
+            else:
+                chat_session = self._paid_client.start_chat(history=[])
+            self._sessions[session_id] = chat_session
             return chat_session
             
         except Exception as e:
@@ -389,6 +393,8 @@ class GeminiClientHybrid:
                 return response.text
             elif hasattr(response, 'parts') and response.parts:
                 return response.parts[0].text
+            elif hasattr(response, 'prompt_feedback') and response.prompt_feedback and hasattr(response.prompt_feedback, 'block_reason') and response.prompt_feedback.block_reason:
+                return f"Response blocked due to: {response.prompt_feedback.block_reason.name}"
             else:
                 return str(response)
                 

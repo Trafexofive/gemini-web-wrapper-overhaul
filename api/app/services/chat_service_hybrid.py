@@ -37,6 +37,7 @@ class ChatServiceHybrid:
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._active_chat_id: Optional[str] = None
         self._current_mode: Literal["free", "paid"] = "free"
+        self._chat_sessions: Dict[str, Any] = {}
         print("ChatServiceHybrid initialized.")
 
     async def load_initial_cache(self, db: aiosqlite.Connection):
@@ -62,7 +63,7 @@ class ChatServiceHybrid:
         
         try:
             # Start new chat session with Gemini
-            self.gemini_client.start_new_chat(new_chat_id)
+            chat_session = self.gemini_client.start_new_chat(new_chat_id)
             
             # Create metadata with current client mode
             initial_metadata = {
@@ -82,6 +83,7 @@ class ChatServiceHybrid:
                 "prompt_sent": False,
                 "client_mode": self._current_mode
             }
+            self._chat_sessions[new_chat_id] = chat_session
             
             print(f"ServiceHybrid: Chat {new_chat_id} created and added to cache.")
             return new_chat_id
@@ -132,6 +134,7 @@ class ChatServiceHybrid:
                 flag_ok = await self.repository.mark_prompt_sent(db, chat_id)
                 if flag_ok:
                     self._cache[chat_id]["prompt_sent"] = True
+                    self._chat_sessions[chat_id] = chat_session
                     print("ServiceHybrid: prompt_sent flag cache updated.")
                 else:
                     print(f"ServiceHybrid ERROR: Failed to mark prompt sent flag in DB for {chat_id}.")
@@ -328,7 +331,10 @@ class ChatServiceHybrid:
         # Send to Gemini
         try:
             print(f"ServiceHybrid: Sending message to Gemini for chat {current_chat_id} (Mode: {self._current_mode})...")
-            chat_session = self.gemini_client.load_chat_from_metadata(self._cache[current_chat_id]["metadata"])
+            chat_session = self._chat_sessions.get(current_chat_id)
+            if not chat_session:
+                chat_session = self.gemini_client.load_chat_from_metadata(self._cache[current_chat_id]["metadata"])
+                self._chat_sessions[current_chat_id] = chat_session
             response_text = await self.gemini_client.send_message(
                 chat_session=chat_session,
                 prompt=user_message_text,
